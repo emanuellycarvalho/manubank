@@ -41,7 +41,7 @@ function getTableDefinitions(): array
             CREATE TABLE IF NOT EXISTS transactions (
                 id                     INTEGER PRIMARY KEY AUTOINCREMENT,
                 category_id            INTEGER NOT NULL,
-                type                   TEXT    NOT NULL CHECK (type IN ('entrada', 'saída')),
+                type                   TEXT    NOT NULL CHECK (type IN ('entrada', 'saída', 'rendimento')),
                 date                   TEXT    NOT NULL,
                 origin                 TEXT    NOT NULL,
                 operation              TEXT    NOT NULL,
@@ -51,6 +51,7 @@ function getTableDefinitions(): array
                 installment_current    INTEGER,
                 installment_total      INTEGER,
                 month_year             TEXT    NOT NULL,
+                external_id            TEXT    UNIQUE NULL,
                 FOREIGN KEY (category_id) REFERENCES categories (id)
                     ON DELETE RESTRICT ON UPDATE CASCADE
             )
@@ -131,6 +132,7 @@ function createIndexes(PDO $pdo): void
     $indexes = [
         'CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON transactions (category_id)',
         'CREATE INDEX IF NOT EXISTS idx_transactions_month_year ON transactions (month_year)',
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_uniq_transaction ON transactions (date, origin, operation, raw_description, amount)',
         'CREATE INDEX IF NOT EXISTS idx_parsing_rules_category_id ON parsing_rules (category_id)',
         'CREATE INDEX IF NOT EXISTS idx_investment_allocations_closure_id ON investment_allocations (monthly_closure_id)',
         'CREATE INDEX IF NOT EXISTS idx_reimbursement_claims_transaction_id ON reimbursement_claims (transaction_id)',

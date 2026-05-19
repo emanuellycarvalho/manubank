@@ -44,6 +44,7 @@ final class NubankParserTest extends TestCase
     public static function nubankLineProvider(): array
     {
         return [
+            // --- Formato original (•••• como U+2022) ---
             'transacao simples'      => [
                 '15 ABR  ••••  1234  Uber Eats             R$ 45,90',
                 45.90, null, null, '2026-04-15',
@@ -59,6 +60,28 @@ final class NubankParserTest extends TestCase
             'sem match no ruleengine' => [
                 '10 MAI  ••••  9999  Loja Desconhecida ABC  R$ 12,00',
                 12.00, null, null, '2026-05-10',
+            ],
+            // --- Formato real do PDF (single space, MAR/ABR PT-BR) ---
+            'real pdf parcela'        => [
+                '29 MAR •••• 1470 Mercadolivre*Mercadol - Parcela 6/12 R$ 286,58',
+                286.58, 6, 12, '2026-03-29',
+            ],
+            'real pdf uber'           => [
+                '02 ABR •••• 8812 Dl *Uber*Rides R$ 5,91',
+                5.91, null, null, '2026-04-02',
+            ],
+            'real pdf 99'             => [
+                '02 ABR •••• 8812 Pg *99 Ride R$ 7,06',
+                7.06, null, null, '2026-04-02',
+            ],
+            'real pdf bhbus'          => [
+                '02 ABR •••• 1470 Transfacil*Bhbus R$ 12,50',
+                12.50, null, null, '2026-04-02',
+            ],
+            // --- Variante com asteriscos (extração alternativa de PDF) ---
+            'mascara asteriscos'      => [
+                '15 ABR **** 1234 Amazon R$ 99,90',
+                99.90, null, null, '2026-04-15',
             ],
         ];
     }
@@ -115,6 +138,29 @@ final class NubankParserTest extends TestCase
         $rows = $this->parser->parseText($text);
 
         $this->assertCount(5, $rows);
+    }
+
+    public function testRealUserFormatBlock(): void
+    {
+        $text = <<<'TEXT'
+29 MAR •••• 1470 Mercadolivre*Mercadol - Parcela 6/12 R$ 286,58
+02 ABR •••• 8812 Dl *Uber*Rides R$ 5,91
+02 ABR •••• 8812 Pg *99 Ride R$ 7,06
+02 ABR •••• 8812 Pg *99 Ride R$ 12,20
+02 ABR •••• 1470 Transfacil*Bhbus R$ 12,50
+TEXT;
+
+        $rows = $this->parser->parseText($text);
+
+        $this->assertCount(5, $rows, 'Deve extrair as 5 transações do formato real do PDF Nubank.');
+        $this->assertSame('2026-03-29', $rows[0]['date']);
+        $this->assertEqualsWithDelta(286.58, $rows[0]['amount'], 0.001);
+        $this->assertSame(6, $rows[0]['installment_current']);
+        $this->assertSame(12, $rows[0]['installment_total']);
+        $this->assertSame('2026-04-02', $rows[1]['date']);
+        $this->assertEqualsWithDelta(5.91, $rows[1]['amount'], 0.001);
+        $this->assertSame('saída', $rows[1]['type']);
+        $this->assertSame('Nubank', $rows[1]['origin']);
     }
 
     public function testParseThrowsForMissingFile(): void

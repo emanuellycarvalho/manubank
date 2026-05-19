@@ -11,7 +11,9 @@
             "src/controllers/RuleEngine.php",
             "src/controllers/NubankParser.php",
             "src/controllers/MercadoPagoParser.php",
-            "src/controllers/ImportController.php"
+            "src/controllers/ImportController.php",
+            "src/controllers/ReimbursementController.php",
+            "src/controllers/ClosureController.php"
         ]
     },
     "autoload-dev": {

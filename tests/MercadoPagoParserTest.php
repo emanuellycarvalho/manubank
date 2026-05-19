@@ -63,15 +63,15 @@ final class MercadoPagoParserTest extends TestCase
     {
         return [
             'saída valor negativo'   => [
-                '01-04-2026;João Silva;;-150,00',
+                '01-04-2026;Pix enviado João Silva;;-150,00',
                 'saída', 150.00, '2026-04-01',
             ],
             'entrada valor positivo' => [
-                '10-04-2026;Maria Souza;;500,00',
+                '10-04-2026;Pix recebido Maria Souza;;500,00',
                 'entrada', 500.00, '2026-04-10',
             ],
             'saída valor pequeno'    => [
-                '15-04-2026;Uber corrida;;-28,90',
+                '15-04-2026;Pix enviado Uber corrida;;-28,90',
                 'saída', 28.90, '2026-04-15',
             ],
         ];
@@ -111,11 +111,12 @@ final class MercadoPagoParserTest extends TestCase
     public static function prefixCleaningProvider(): array
     {
         return [
-            'prefixo transferência enviada'    => ['Transferência enviada João Silva', 'João Silva'],
-            'prefixo pix qr'                   => ['Pagamento com QR Pix Padaria', 'Padaria'],
-            'prefixo pagamento efetuado'       => ['Pagamento efetuado para Serviço', 'Serviço'],
-            'prefixo transferência recebida'   => ['Transferência recebida de Maria', 'Maria'],
-            'sem prefixo'                      => ['Uber corrida', 'Uber corrida'],
+            'prefixo pix enviado'               => ['Pix enviado João Silva',              'João Silva'],
+            'prefixo pix recebido'              => ['Pix recebido Maria Souza',             'Maria Souza'],
+            'prefixo pix qr'                    => ['Pagamento com QR Pix Padaria',         'Padaria'],
+            'prefixo transferência pix enviada' => ['Transferência Pix enviada Banco XYZ',  'Banco XYZ'],
+            'prefixo transferência pix recebida'=> ['Transferência Pix recebida Maria Souza', 'Maria Souza'],
+            'sem prefixo reconhecido'           => ['Pix Loja Online',                      'Pix Loja Online'],
         ];
     }
 
@@ -133,8 +134,8 @@ final class MercadoPagoParserTest extends TestCase
 
         $this->assertCount(1, $rows);
         $this->assertSame($expectedRawDescription, $rows[0]['raw_description']);
-        // operation deve manter o valor original (antes da limpeza)
-        $this->assertSame($rawOp, $rows[0]['operation']);
+        // operation é sempre 'Pix' para transações MercadoPago
+        $this->assertSame('Pix', $rows[0]['operation']);
     }
 
     // ---------------------------------------------------------------------------
@@ -144,8 +145,8 @@ final class MercadoPagoParserTest extends TestCase
     public function testRowWithAmountZeroIsSkipped(): void
     {
         $path = $this->createTempCsv([
-            'Data;Descricao;Tipo;Valor',
-            '20-04-2026;Separador de saldo;;0,00',
+            'Cabeçalho irrelevante',
+            '20-04-2026;Pix enviado Saldo;;0,00',
         ]);
 
         try {
@@ -160,8 +161,8 @@ final class MercadoPagoParserTest extends TestCase
     public function testRowWithInvalidDateIsSkipped(): void
     {
         $path = $this->createTempCsv([
-            'Data;Descricao;Tipo;Valor',
-            'invalid-date;Teste;;-10,00',
+            'Cabeçalho irrelevante',
+            'invalid-date;Pix enviado Teste;;-10,00',
         ]);
 
         try {
@@ -176,8 +177,8 @@ final class MercadoPagoParserTest extends TestCase
     public function testUberRuleApplied(): void
     {
         $path = $this->createTempCsv([
-            'Data;Descricao;Tipo;Valor',
-            '15-04-2026;Uber corrida 15/04;;-28,90',
+            'Cabeçalho irrelevante',
+            '15-04-2026;Pix enviado Uber corrida 15/04;;-28,90',
         ]);
 
         try {
@@ -192,8 +193,8 @@ final class MercadoPagoParserTest extends TestCase
     public function testInstallmentFieldsAreAlwaysNull(): void
     {
         $path = $this->createTempCsv([
-            'Data;Descricao;Tipo;Valor',
-            '01-04-2026;Qualquer coisa;;-50,00',
+            'Cabeçalho irrelevante',
+            '01-04-2026;Pix enviado Qualquer coisa;;-50,00',
         ]);
 
         try {
@@ -210,8 +211,102 @@ final class MercadoPagoParserTest extends TestCase
     {
         $rows = $this->parser->parse(__DIR__ . '/fixtures/mercadopago_sample.csv');
 
-        // fixture tem 5 linhas: 4 válidas + 1 com valor 0 (ignorada)
-        $this->assertCount(4, $rows);
+        // fixture: 7 linhas com data, apenas 5 contêm "pix" → importadas
+        // Rendimentos e Dinheiro retirado são descartados
+        $this->assertCount(5, $rows);
+
+        // Todas as operações devem ser "Pix"
+        foreach ($rows as $row) {
+            $this->assertSame('Pix', $row['operation']);
+        }
+    }
+
+    public function testRendimentoIsIgnored(): void
+    {
+        $path = $this->createTempCsv([
+            'Cabeçalho irrelevante',
+            '20-04-2026;Rendimentos do período;EXT-999;12,75',
+        ]);
+
+        try {
+            $rows = $this->parser->parse($path);
+        } finally {
+            unlink($path);
+        }
+
+        $this->assertCount(0, $rows);
+    }
+
+    public function testNonPixIsIgnored(): void
+    {
+        $path = $this->createTempCsv([
+            'Cabeçalho irrelevante',
+            '25-04-2026;Dinheiro retirado Caixa;MP-006;-200,00',
+        ]);
+
+        try {
+            $rows = $this->parser->parse($path);
+        } finally {
+            unlink($path);
+        }
+
+        $this->assertCount(0, $rows);
+    }
+
+    public function testOperationIsAlwaysPix(): void
+    {
+        $path = $this->createTempCsv([
+            'Cabeçalho irrelevante',
+            '01-04-2026;Pix enviado João Silva;MP-001;-50,00',
+        ]);
+
+        try {
+            $rows = $this->parser->parse($path);
+        } finally {
+            unlink($path);
+        }
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('Pix', $rows[0]['operation']);
+    }
+
+    public function testExternalIdExtracted(): void
+    {
+        $path = $this->createTempCsv([
+            'Cabeçalho irrelevante',
+            '01-04-2026;Pix enviado João Silva;REF-123;-50,00',
+        ]);
+
+        try {
+            $rows = $this->parser->parse($path);
+        } finally {
+            unlink($path);
+        }
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('REF-123', $rows[0]['external_id']);
+    }
+
+    public function testHeaderLinesAreSkipped(): void
+    {
+        // Simula o formato real com várias linhas de resumo antes das transações
+        $path = $this->createTempCsv([
+            'Mercado Pago - Extrato',
+            'Período: 01/04/2026 a 30/04/2026',
+            'Titular: Fulano',
+            '',
+            'RELEASE_DATE;TRANSACTION_TYPE;REFERENCE_ID;NET_CREDIT_AMOUNT',
+            '05-04-2026;Pix enviado Loja;REF-001;-25,00',
+        ]);
+
+        try {
+            $rows = $this->parser->parse($path);
+        } finally {
+            unlink($path);
+        }
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('2026-04-05', $rows[0]['date']);
     }
 
     public function testThrowsForMissingFile(): void

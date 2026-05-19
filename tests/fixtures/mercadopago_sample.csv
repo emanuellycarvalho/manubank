@@ -1,6 +1,12 @@
-Data;Descrição;Tipo;Valor
-01-04-2026;Transferência enviada João Silva;saída;-150,00
-05-04-2026;Pagamento com QR Pix Padaria Central;saída;-32,50
-10-04-2026;Transferência recebida de Maria Souza;entrada;500,00
-15-04-2026;Uber corrida 04/15;saída;-28,90
-20-04-2026;Separador de saldo;;0,00
+Mercado Pago - Extrato de conta
+Período: 01/04/2026 a 30/04/2026
+Titular: Fulano de Tal
+
+RELEASE_DATE;TRANSACTION_TYPE;REFERENCE_ID;NET_CREDIT_AMOUNT
+05-04-2026;Pix enviado João Silva;MP-001;-150,00
+08-04-2026;Pagamento com QR Pix Padaria Central;MP-002;-32,50
+10-04-2026;Pix recebido Maria Souza;MP-003;500,00
+15-04-2026;Pix enviado Uber corrida;MP-004;-28,90
+20-04-2026;Rendimentos do período;MP-005;12,75
+25-04-2026;Dinheiro retirado Caixa Eletrônico;MP-006;-200,00
+28-04-2026;Transferência Pix enviada Banco XYZ;MP-007;-80,00

@@ -1,0 +1,59 @@
+import { createApp } from 'vue'
+import './style.css'
+import App from './App.vue'
+import router from './router'
+import Unicon from 'vue-unicons'
+import {
+  uniChartPie,
+  uniTagAlt,
+  uniFileAlt,
+  uniUploadAlt,
+  uniWallet,
+  uniTimes,
+  uniTimesCircle,
+  uniCheckCircle,
+  uniSetting,
+  uniClipboardAlt,
+  uniLink,
+  uniFolderUpload,
+  uniInbox,
+  uniBan,
+  uniRefresh,
+  uniMoon,
+  uniSun,
+  uniAngleDown,
+  uniExclamationTriangle,
+  uniEditAlt,
+  uniTrashAlt,
+  uniPlus,
+} from 'vue-unicons/dist/icons'
+
+Unicon.add([
+  uniChartPie,
+  uniTagAlt,
+  uniFileAlt,
+  uniUploadAlt,
+  uniWallet,
+  uniTimes,
+  uniTimesCircle,
+  uniCheckCircle,
+  uniSetting,
+  uniClipboardAlt,
+  uniLink,
+  uniFolderUpload,
+  uniInbox,
+  uniBan,
+  uniRefresh,
+  uniMoon,
+  uniSun,
+  uniAngleDown,
+  uniExclamationTriangle,
+  uniEditAlt,
+  uniTrashAlt,
+  uniPlus,
+])
+
+const app = createApp(App)
+app.use(Unicon, { fill: '#e7e7e7' })
+app.use(router)
+app.mount('#app')

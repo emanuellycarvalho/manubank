@@ -141,29 +141,45 @@ final class ImportController
     }
 
     /**
-     * Persiste um lote de transações na DB numa única transação PDO.
+     * Persiste um lote de transações já formatadas na DB.
      *
+     * Método público para uso externo (ex: import_text.php).
      * Linhas com `amount === 0.0` ou `date` vazia são contabilizadas em
      * `$skipped` sem abortar o batch.
      *
      * @param  array<int, array<string, mixed>> $rows
-     * @return array{success: bool, imported: int, skipped: int, month_year_groups: array<string, int>}
+     * @return array{imported: int, skipped: int, month_year_groups: array<string, int>}
+     */
+    public function persistFromRows(array $rows): array
+    {
+        return $this->persistTransactions($rows);
+    }
+
+    /**
+     * Persiste um lote de transações na DB numa única transação PDO.
+     *
+     * @param  array<int, array<string, mixed>> $rows
+     * @return array{imported: int, skipped: int, month_year_groups: array<string, int>}
      */
     private function persistTransactions(array $rows): array
     {
+        // INSERT OR IGNORE descarta silenciosamente duplicados via:
+        //   - external_id UNIQUE (MercadoPago)
+        //   - idx_uniq_transaction (date+origin+operation+raw_description+amount)
         $sql = <<<'SQL'
-            INSERT INTO transactions
+            INSERT OR IGNORE INTO transactions
                 (category_id, type, date, origin, operation, amount, raw_description,
-                 translated_description, installment_current, installment_total, month_year)
+                 translated_description, installment_current, installment_total, month_year,
+                 external_id)
             VALUES
                 (:category_id, :type, :date, :origin, :operation, :amount, :raw_description,
-                 :translated_description, :installment_current, :installment_total, :month_year)
+                 :translated_description, :installment_current, :installment_total, :month_year,
+                 :external_id)
             SQL;
 
-        $stmt    = $this->pdo->prepare($sql);
-        $imported = 0;
-        $skipped  = 0;
-        /** @var array<string, int> $monthYearGroups */
+        $stmt            = $this->pdo->prepare($sql);
+        $imported        = 0;
+        $skipped         = 0;
         $monthYearGroups = [];
 
         $this->pdo->beginTransaction();
@@ -187,11 +203,16 @@ final class ImportController
                     ':installment_current'    => $row['installment_current'] ?? null,
                     ':installment_total'      => $row['installment_total'] ?? null,
                     ':month_year'             => $row['month_year'],
+                    ':external_id'            => $row['external_id'] ?? null,
                 ]);
 
-                $imported++;
-                $my = $row['month_year'];
-                $monthYearGroups[$my] = ($monthYearGroups[$my] ?? 0) + 1;
+                if ($stmt->rowCount() > 0) {
+                    $imported++;
+                    $my = $row['month_year'];
+                    $monthYearGroups[$my] = ($monthYearGroups[$my] ?? 0) + 1;
+                } else {
+                    $skipped++;
+                }
             }
 
             $this->pdo->commit();
