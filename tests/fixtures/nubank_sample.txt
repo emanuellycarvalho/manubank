@@ -1,0 +1,7 @@
+Fatura Nubank - Abril 2026
+
+15 ABR  ••••  1234  Uber Eats                              R$ 45,90
+02 ABR  ••••  1234  Netflix  - Parcela 2/12                R$ 55,90
+10 ABR  ••••  1234  Supernosso Compras                     R$ 230,15
+22 ABR  ••••  1234  Loja Desconhecida XYZ                  R$ 12,00
+28 ABR  ••••  1234  Farmácia Popular  - Parcela 1/3        R$ 1.200,00

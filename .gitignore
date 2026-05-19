@@ -1,0 +1,8 @@
+# SQLite (gerado localmente)
+src/db/finance.sqlite
+src/db/finance.sqlite-journal
+src/db/finance.sqlite-wal
+src/db/finance.sqlite-shm
+
+# macOS
+.DS_Store
