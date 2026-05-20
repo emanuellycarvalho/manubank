@@ -156,8 +156,10 @@ const TOC = [
           <code>29 MAR •••• 1470 Mercadolivre*Mercadol - Parcela 6/12 R$ 286,58</code>
         </p>
         <p>
-          Parcelas (6/12) e compras internacionais costumam ser reconhecidas; se uma linha estiver incompleta
-          ou sem valor, ela pode ser contada como <strong>ignorada</strong>.
+          Parcelas (6/12), <strong>estornos</strong> (<code>Estorno de "Loja"</code> + <code>−R$</code>),
+          <strong>desconto de antecipação</strong> (<code>Desconto Antecipação … −R$</code>) e compras internacionais
+          costumam ser reconhecidos; estornos e descontos entram como <strong>entrada</strong> (crédito na fatura).
+          Linhas incompletas podem ser <strong>ignoradas</strong>.
         </p>
       </div>
     </section>

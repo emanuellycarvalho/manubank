@@ -169,4 +169,93 @@ TEXT;
 
         $this->parser->parse('/caminho/inexistente/fatura.pdf');
     }
+
+    public function testParseTextEstornoRefund(): void
+    {
+        $text = <<<'TEXT'
+08 MAR •••• 8812 Dl*99 Ride R$ 13,75
+08 MAR Estorno de "Pg *Tembici"
+
+Estorno referente a compra em Pg *Tembici, de valor R$ 9,99, realizada em
+03 de Março de 2026
+
+−R$ 9,99
+TEXT;
+
+        $rows = $this->parser->parseText($text);
+
+        $this->assertCount(2, $rows, 'Deve extrair a compra e o estorno.');
+
+        $charge = $rows[0];
+        $this->assertSame('saída', $charge['type']);
+        $this->assertEqualsWithDelta(13.75, $charge['amount'], 0.001);
+
+        $refund = $rows[1];
+        $this->assertSame('entrada', $refund['type']);
+        $this->assertSame('Estorno', $refund['operation']);
+        $this->assertSame('Estorno de "Pg *Tembici"', $refund['raw_description']);
+        $this->assertEqualsWithDelta(9.99, $refund['amount'], 0.001);
+        $this->assertSame('2026-03-08', $refund['date']);
+        $this->assertSame('2026-03', $refund['month_year']);
+        $this->assertNull($refund['installment_current']);
+    }
+
+    public function testParseTextEstornoWithHyphenMinusAmount(): void
+    {
+        $text = <<<'TEXT'
+10 ABR Estorno de "Uber Trip"
+
+Estorno referente a compra em Uber Trip, de valor R$ 5,00, realizada em
+01 de Abril de 2026
+
+-R$ 5,00
+TEXT;
+
+        $rows = $this->parser->parseText($text);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('entrada', $rows[0]['type']);
+        $this->assertEqualsWithDelta(5.00, $rows[0]['amount'], 0.001);
+    }
+
+    public function testParseTextEstornoAmountFromDetailWhenNoMinusLine(): void
+    {
+        $text = <<<'TEXT'
+15 MAI Estorno de "Loja XYZ"
+
+Estorno referente a compra em Loja XYZ, de valor R$ 12,50, realizada em
+10 de Maio de 2026
+TEXT;
+
+        $rows = $this->parser->parseText($text);
+
+        $this->assertCount(1, $rows);
+        $this->assertEqualsWithDelta(12.50, $rows[0]['amount'], 0.001);
+        $this->assertSame('entrada', $rows[0]['type']);
+    }
+
+    public function testParseTextDescontoAntecipacao(): void
+    {
+        $text = <<<'TEXT'
+05 FEV •••• 1470 Antecipada - Mercadolivre*Mercadol - Parcela 4/12 R$ 286,58
+05 FEV Desconto Antecipação Mercadolivre*Mercadol −R$ 20,82
+TEXT;
+
+        $rows = $this->parser->parseText($text);
+
+        $this->assertCount(2, $rows, 'Deve extrair a antecipação (saída) e o desconto (entrada).');
+
+        $charge = $rows[0];
+        $this->assertSame('saída', $charge['type']);
+        $this->assertEqualsWithDelta(286.58, $charge['amount'], 0.001);
+        $this->assertSame(4, $charge['installment_current']);
+        $this->assertSame(12, $charge['installment_total']);
+
+        $discount = $rows[1];
+        $this->assertSame('entrada', $discount['type']);
+        $this->assertSame('Desconto Antecipação', $discount['operation']);
+        $this->assertSame('Desconto Antecipação Mercadolivre*Mercadol', $discount['raw_description']);
+        $this->assertEqualsWithDelta(20.82, $discount['amount'], 0.001);
+        $this->assertSame('2026-02-05', $discount['date']);
+    }
 }

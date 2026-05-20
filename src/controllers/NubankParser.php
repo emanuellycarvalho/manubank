@@ -37,6 +37,23 @@ final class NubankParser
         '/(\d{2}\s[a-zA-ZÀ-ú]{3})\s+[^\s\d]+\s+(\d{4})\s+(.+?)(?:\s+-\s+Parcela\s+(\d+)\/(\d+))?\s+R\$[\s\x{00A0}]+([\d,.]+)/u';
 
     /**
+     * Cabeçalho de estorno/reembolso (crédito na fatura).
+     *
+     * Ex.: 08 MAR Estorno de "Pg *Tembici"
+     * O valor costuma vir em linhas seguintes (−R$ 9,99 ou "de valor R$ 9,99").
+     */
+    private const ESTORNO_HEADER_REGEX =
+        '/(\d{2}\s[a-zA-ZÀ-ú]{3})\s+Estorno\s+de\s+"([^"]+)"/iu';
+
+    /**
+     * Desconto por antecipação de parcela (crédito na fatura).
+     *
+     * Ex.: 05 FEV Desconto Antecipação Mercadolivre*Mercadol −R$ 20,82
+     */
+    private const DESCONTO_ANTECIPACAO_REGEX =
+        '/(\d{2}\s[a-zA-ZÀ-ú]{3})\s+Desconto\s+Antecipa\S*\s+(.+?)\s+[−\-]\s*R\$[\s\x{00A0}]*([\d,.]+)/iu';
+
+    /**
      * Mapa de abreviações de meses em português para números MM.
      *
      * @var array<string, string>
@@ -96,6 +113,20 @@ final class NubankParser
      */
     public function parseText(string $text): array
     {
+        return array_merge(
+            $this->parseChargeLines($text),
+            $this->parseRefundBlocks($text),
+            $this->parseEarlyPaymentDiscounts($text),
+        );
+    }
+
+    /**
+     * Linhas de compra no formato clássico (data + cartão + descrição + R$).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function parseChargeLines(string $text): array
+    {
         $matches = [];
         preg_match_all(self::TRANSACTION_REGEX, $text, $matches, PREG_SET_ORDER);
 
@@ -103,14 +134,14 @@ final class NubankParser
         $year = $this->year !== 0 ? $this->year : (int) date('Y');
 
         foreach ($matches as $match) {
-            $rawDate     = $match[1];              // ex: "15 ABR"
+            $rawDate     = $match[1];
             $rawDesc     = trim($match[3]);
             $installCurr = $match[4] !== '' ? (int) $match[4] : null;
             $installTot  = $match[5] !== '' ? (int) $match[5] : null;
             $amount      = $this->parseAmount($match[6]);
 
             $date      = $this->formatDate($rawDate, $year);
-            $monthYear = substr($date, 0, 7); // "YYYY-MM"
+            $monthYear = substr($date, 0, 7);
 
             $ruleResult = $this->ruleEngine->applyRules($rawDesc);
 
@@ -125,6 +156,119 @@ final class NubankParser
                 'translated_description' => $ruleResult['translated_description'],
                 'installment_current'    => $installCurr,
                 'installment_total'      => $installTot,
+                'month_year'             => $monthYear,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Blocos de estorno/reembolso (crédito na fatura — reduz o total da fatura).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function parseRefundBlocks(string $text): array
+    {
+        if (!preg_match_all(self::ESTORNO_HEADER_REGEX, $text, $headers, PREG_OFFSET_CAPTURE)) {
+            return [];
+        }
+
+        $rows = [];
+        $year = $this->year !== 0 ? $this->year : (int) date('Y');
+        $count = count($headers[0]);
+
+        for ($i = 0; $i < $count; $i++) {
+            $rawDate  = $headers[1][$i][0];
+            $merchant = trim($headers[2][$i][0]);
+            $start    = $headers[0][$i][1] + strlen($headers[0][$i][0]);
+            $end      = ($i + 1 < $count) ? $headers[0][$i + 1][1] : strlen($text);
+            $block    = substr($text, $start, $end - $start);
+
+            $amount = $this->parseRefundAmount($block);
+            if ($amount === null || $amount <= 0.0) {
+                continue;
+            }
+
+            $rawDesc    = 'Estorno de "' . $merchant . '"';
+            $date       = $this->formatDate($rawDate, $year);
+            $monthYear  = substr($date, 0, 7);
+            $ruleResult = $this->ruleEngine->applyRules($merchant);
+
+            $rows[] = [
+                'category_id'            => $ruleResult['category_id'],
+                'type'                   => 'entrada',
+                'date'                   => $date,
+                'origin'                 => 'Nubank',
+                'operation'              => 'Estorno',
+                'amount'                 => $amount,
+                'raw_description'        => $rawDesc,
+                'translated_description' => $ruleResult['translated_description'],
+                'installment_current'    => null,
+                'installment_total'      => null,
+                'month_year'             => $monthYear,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Extrai o valor creditado num bloco de estorno.
+     *
+     * Prioridade: linha com −R$ / -R$; depois texto "de valor R$ …".
+     */
+    private function parseRefundAmount(string $block): ?float
+    {
+        if (preg_match('/[−\-]\s*R\$[\s\x{00A0}]*([\d,.]+)/u', $block, $m)) {
+            return $this->parseAmount($m[1]);
+        }
+
+        if (preg_match('/de\s+valor\s+R\$[\s\x{00A0}]*([\d,.]+)/iu', $block, $m)) {
+            return $this->parseAmount($m[1]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Linhas de desconto por antecipação de parcela (crédito na fatura).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function parseEarlyPaymentDiscounts(string $text): array
+    {
+        $matches = [];
+        preg_match_all(self::DESCONTO_ANTECIPACAO_REGEX, $text, $matches, PREG_SET_ORDER);
+
+        $rows = [];
+        $year = $this->year !== 0 ? $this->year : (int) date('Y');
+
+        foreach ($matches as $match) {
+            $rawDate  = $match[1];
+            $merchant = trim($match[2]);
+            $amount   = $this->parseAmount($match[3]);
+
+            if ($amount <= 0.0) {
+                continue;
+            }
+
+            $rawDesc    = 'Desconto Antecipação ' . $merchant;
+            $date       = $this->formatDate($rawDate, $year);
+            $monthYear  = substr($date, 0, 7);
+            $ruleResult = $this->ruleEngine->applyRules($merchant);
+
+            $rows[] = [
+                'category_id'            => $ruleResult['category_id'],
+                'type'                   => 'entrada',
+                'date'                   => $date,
+                'origin'                 => 'Nubank',
+                'operation'              => 'Desconto Antecipação',
+                'amount'                 => $amount,
+                'raw_description'        => $rawDesc,
+                'translated_description' => $ruleResult['translated_description'],
+                'installment_current'    => null,
+                'installment_total'      => null,
                 'month_year'             => $monthYear,
             ];
         }
