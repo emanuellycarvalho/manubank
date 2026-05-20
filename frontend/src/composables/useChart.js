@@ -25,6 +25,8 @@ export function useChart(canvasRef, hasData, getConfig) {
     if (!canvasRef.value) return
 
     try {
+      const existing = Chart.getChart(canvasRef.value)
+      existing?.destroy()
       chart = new Chart(canvasRef.value, getConfig())
     } catch (err) {
       console.error('[useChart] render error:', err)

@@ -13,7 +13,8 @@
             "src/controllers/MercadoPagoParser.php",
             "src/controllers/ImportController.php",
             "src/controllers/ReimbursementController.php",
-            "src/controllers/ClosureController.php"
+            "src/controllers/ClosureController.php",
+            "src/controllers/ChartController.php"
         ]
     },
     "autoload-dev": {

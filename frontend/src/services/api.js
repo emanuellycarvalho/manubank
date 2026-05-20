@@ -57,6 +57,18 @@ export const rulesApi = {
   remove: (id) => http.delete(`/api_rules.php?id=${id}`),
 }
 
+// ── Charts (dashboard aggregations) ─────────────────────────────────────────
+export const chartsApi = {
+  getSeries: ({ startDate, endDate, granularity }) =>
+    http.get('/api_charts.php', {
+      params: {
+        start_date: startDate,
+        end_date: endDate,
+        granularity,
+      },
+    }),
+}
+
 // ── Closures ────────────────────────────────────────────────────────────────
 export const closuresApi = {
   getSummary: (monthYear) =>
