@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { transactionsApi, categoriesApi } from '@/services/api.js'
 import RuleModal                  from '@/components/RuleModal.vue'
 import ReimbursementClaimModal    from '@/components/ReimbursementClaimModal.vue'
@@ -38,6 +38,15 @@ const errorMsg         = ref('')
 const categories       = ref([])
 const searchQuery      = ref('')
 const showManualModal  = ref(false)
+
+const PAGE_SIZE_OPTIONS = [
+  { value: '25', label: '25' },
+  { value: '50', label: '50' },
+  { value: '100', label: '100' },
+  { value: 'all', label: 'Todos' },
+]
+const pageSize    = ref('25')
+const currentPage = ref(1)
 
 // ── Period config (persisted in localStorage) ──────────────────────────────
 const STORAGE_KEY = 'finance_period_start_day'
@@ -171,6 +180,52 @@ const { sortedItems: sortedTransactions, toggleSort, sortClass } = useTableSort(
 )
 
 const hasSearchFilter = computed(() => searchQuery.value.trim().length > 0)
+
+const totalFiltered = computed(() => sortedTransactions.value.length)
+
+const effectivePageSize = computed(() => {
+  if (pageSize.value === 'all') return Math.max(totalFiltered.value, 1)
+  return parseInt(pageSize.value, 10)
+})
+
+const totalPages = computed(() => {
+  const total = totalFiltered.value
+  if (!total || pageSize.value === 'all') return 1
+  return Math.ceil(total / effectivePageSize.value)
+})
+
+const paginatedTransactions = computed(() => {
+  const items = sortedTransactions.value
+  if (pageSize.value === 'all') return items
+  const start = (currentPage.value - 1) * effectivePageSize.value
+  return items.slice(start, start + effectivePageSize.value)
+})
+
+const rangeStart = computed(() => {
+  if (!totalFiltered.value) return 0
+  if (pageSize.value === 'all') return 1
+  return (currentPage.value - 1) * effectivePageSize.value + 1
+})
+
+const rangeEnd = computed(() => {
+  if (!totalFiltered.value) return 0
+  if (pageSize.value === 'all') return totalFiltered.value
+  return Math.min(currentPage.value * effectivePageSize.value, totalFiltered.value)
+})
+
+const showPageNav = computed(() => pageSize.value !== 'all' && totalPages.value > 1)
+
+function goToPage(page) {
+  currentPage.value = Math.max(1, Math.min(page, totalPages.value))
+}
+
+watch([searchQuery, selectedMonth, pageSize], () => {
+  currentPage.value = 1
+})
+
+watch(totalPages, (tp) => {
+  if (currentPage.value > tp) currentPage.value = tp
+})
 
 // ── Formatting ─────────────────────────────────────────────────────────────
 function fmt(amount) {
@@ -481,7 +536,7 @@ async function confirmDelete() {
         </thead>
         <tbody>
           <tr
-            v-for="tx in sortedTransactions"
+            v-for="tx in paginatedTransactions"
             :key="tx.id"
             :class="rowClass(tx.type)"
           >
@@ -561,6 +616,59 @@ async function confirmDelete() {
           </tr>
         </tbody>
       </table>
+
+      <div class="table-pagination">
+        <div class="table-pagination__size">
+          <label for="tx-page-size" class="table-pagination__label">Exibir</label>
+          <select
+            id="tx-page-size"
+            v-model="pageSize"
+            class="form-control table-pagination__select"
+          >
+            <option
+              v-for="opt in PAGE_SIZE_OPTIONS"
+              :key="opt.value"
+              :value="opt.value"
+            >
+              {{ opt.label }}
+            </option>
+          </select>
+          <span class="table-pagination__label">por página</span>
+        </div>
+
+        <p class="table-pagination__info">
+          <template v-if="pageSize === 'all'">
+            Mostrando todos os {{ totalFiltered }} registros
+          </template>
+          <template v-else>
+            {{ rangeStart }}–{{ rangeEnd }} de {{ totalFiltered }} registros
+          </template>
+        </p>
+
+        <nav v-if="showPageNav" class="table-pagination__nav" aria-label="Paginação do extrato">
+          <button
+            type="button"
+            class="btn-page"
+            :disabled="currentPage <= 1"
+            aria-label="Página anterior"
+            @click="goToPage(currentPage - 1)"
+          >
+            <unicon name="angle-left-b" width="18" height="18" />
+          </button>
+          <span class="table-pagination__pages">
+            Página {{ currentPage }} de {{ totalPages }}
+          </span>
+          <button
+            type="button"
+            class="btn-page"
+            :disabled="currentPage >= totalPages"
+            aria-label="Próxima página"
+            @click="goToPage(currentPage + 1)"
+          >
+            <unicon name="angle-right-b" width="18" height="18" />
+          </button>
+        </nav>
+      </div>
       </div>
     </template>
 
@@ -938,6 +1046,81 @@ async function confirmDelete() {
 .btn-action--claim   { background: var(--color-accent);}
 .btn-action--payment { background: var(--color-success); color: #e7e7e7; }
 .btn-action--delete  { background: var(--color-error); color: #e7e7e7; }
+
+/* ── Pagination ── */
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border-dark);
+  background: var(--color-bg-secondary);
+}
+
+.table-pagination__size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-pagination__label {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.table-pagination__select {
+  width: auto;
+  min-width: 72px;
+  padding: 6px 28px 6px 10px;
+  font-size: 0.85rem;
+}
+
+.table-pagination__info {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.table-pagination__nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.table-pagination__pages {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  min-width: 7rem;
+  text-align: center;
+}
+
+.btn-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.btn-page:hover:not(:disabled) {
+  background: var(--color-info);
+  border-color: var(--color-border-light);
+}
+
+.btn-page:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 .spinner {
   display: inline-block;

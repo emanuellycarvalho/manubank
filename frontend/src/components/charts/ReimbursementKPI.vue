@@ -16,8 +16,12 @@ const openClaims    = computed(() => props.claims.filter(c => c.status === 'Aber
 const partialClaims = computed(() => props.claims.filter(c => c.status === 'Parcial'))
 const paidClaims    = computed(() => props.claims.filter(c => c.status === 'Quitado'))
 
-const totalOpen    = computed(() => openClaims.value.reduce((s, c) => s + c.expected_amount, 0))
-const totalPartial = computed(() => partialClaims.value.reduce((s, c) => s + c.expected_amount, 0))
+function claimOutstanding(c) {
+  return c.outstanding_amount ?? c.expected_amount
+}
+
+const totalOpen    = computed(() => openClaims.value.reduce((s, c) => s + claimOutstanding(c), 0))
+const totalPartial = computed(() => partialClaims.value.reduce((s, c) => s + claimOutstanding(c), 0))
 const totalQuitado = computed(() => paidClaims.value.reduce((s, c) => s + c.expected_amount, 0))
 
 const totalPending = computed(() => totalOpen.value + totalPartial.value)

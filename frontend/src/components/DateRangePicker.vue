@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, useId } from 'vue'
 
 const props = defineProps({
   start: { type: String, default: '' },
@@ -13,6 +13,7 @@ const isOpen = ref(false)
 const draftStart = ref(props.start)
 const draftEnd   = ref(props.end)
 const rootRef    = ref(null)
+const triggerId  = useId()
 
 const QUICK_LINKS = [
   { id: 'today',      label: 'Hoje' },
@@ -145,14 +146,15 @@ onUnmounted(() => {
 
 <template>
   <div ref="rootRef" class="date-range-picker">
+    <label v-if="label" class="drp-field-label" :for="triggerId">{{ label }}</label>
     <button
+      :id="triggerId"
       type="button"
       class="drp-trigger"
       :aria-expanded="isOpen"
       aria-haspopup="dialog"
       @click.stop="toggleOpen"
     >
-      <span class="drp-trigger__label">{{ label }}</span>
       <span class="drp-trigger__value">{{ triggerLabel }}</span>
       <unicon name="angle-down" width="16" height="16" class="drp-trigger__icon" />
     </button>
@@ -215,7 +217,15 @@ onUnmounted(() => {
 <style scoped>
 .date-range-picker {
   position: relative;
-  display: inline-block;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.drp-field-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
 }
 
 .drp-trigger {
@@ -224,6 +234,7 @@ onUnmounted(() => {
   gap: 10px;
   padding: 8px 12px;
   min-width: 220px;
+  width: 100%;
   background: var(--color-bg-input);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-sm);
@@ -244,17 +255,10 @@ onUnmounted(() => {
   box-shadow: 0 0 0 2px rgba(242, 76, 0, 0.35);
 }
 
-.drp-trigger__label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--color-text-muted);
-}
-
 .drp-trigger__value {
   flex: 1;
   font-weight: 600;
+  font-size: 0.88rem;
 }
 
 .drp-trigger__icon {

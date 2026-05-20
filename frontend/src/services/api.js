@@ -67,6 +67,33 @@ export const chartsApi = {
         granularity,
       },
     }),
+  getExpensesByCategory: ({ startDate, endDate }) =>
+    http.get('/api_charts.php', {
+      params: {
+        start_date: startDate,
+        end_date: endDate,
+        breakdown: 'category',
+      },
+    }),
+  getFixedVsVariable: ({ startDate, endDate, granularity }) =>
+    http.get('/api_charts.php', {
+      params: {
+        start_date: startDate,
+        end_date: endDate,
+        granularity,
+        breakdown: 'fixed_variable',
+      },
+    }),
+  getCategoryEvolution: ({ startDate, endDate, granularity, categoryId }) =>
+    http.get('/api_charts.php', {
+      params: {
+        start_date: startDate,
+        end_date: endDate,
+        granularity,
+        breakdown: 'category_evolution',
+        category_id: categoryId,
+      },
+    }),
 }
 
 // ── Closures ────────────────────────────────────────────────────────────────
@@ -82,6 +109,8 @@ export const closuresApi = {
 // ── Reimbursements ──────────────────────────────────────────────────────────
 export const reimbursementsApi = {
   activeClaims: () => http.get('/api_reimbursements.php'),
+  dashboardSummary: () =>
+    http.get('/api_reimbursements.php', { params: { summary: 1 } }),
   createClaim: (payload) =>
     http.post('/api_reimbursements.php', { action: 'create_claim', ...payload }),
   registerPayment: (payload) =>

@@ -1,6 +1,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import BalanceLineChart from '@/components/charts/BalanceLineChart.vue'
+import CategoryPieChart from '@/components/charts/CategoryPieChart.vue'
+import FixedVsVariableChart from '@/components/charts/FixedVsVariableChart.vue'
+import ReimbursementKPI from '@/components/charts/ReimbursementKPI.vue'
+import CategoryEvolutionLineChart from '@/components/charts/CategoryEvolutionLineChart.vue'
 import DateRangePicker from '@/components/DateRangePicker.vue'
 import { useDashboardCharts } from '@/composables/useDashboardCharts.js'
 import { defaultDashboardDateRange } from '@/utils/dates.js'
@@ -16,14 +20,31 @@ const defaults = defaultDashboardDateRange()
 const startDate   = ref(defaults.start)
 const endDate     = ref(defaults.end)
 const granularity = ref('month')
+const selectedCategoryId = ref(null)
 
 const {
   chartLabels,
   incomeData,
   expenseData,
+  categorySlices,
+  fixedVarLabels,
+  fixedCostData,
+  variableCostData,
+  reimbursementClaims,
+  expenseCategories,
+  categoryEvolutionLabels,
+  categoryEvolutionValues,
+  categoryEvolutionName,
+  categoryEvolutionColor,
   isLoadingData,
+  isLoadingCategoryChart,
+  isLoadingReimb,
   dataError,
-} = useDashboardCharts(startDate, endDate, granularity)
+} = useDashboardCharts(startDate, endDate, granularity, selectedCategoryId)
+
+const isLoading = computed(
+  () => isLoadingData.value || isLoadingReimb.value || isLoadingCategoryChart.value,
+)
 
 const chartDescription = computed(() => {
   const map = {
@@ -33,6 +54,16 @@ const chartDescription = computed(() => {
     semester: 'semestral',
   }
   return `Evolução ${map[granularity.value] ?? ''} de entradas e saídas no período selecionado.`
+})
+
+const fixedVarDescription = computed(() => {
+  const map = {
+    day:      'diária',
+    week:     'semanal',
+    month:    'mensal',
+    semester: 'semestral',
+  }
+  return `Custos fixos (ex.: assinaturas, saúde) vs. variáveis (ex.: lazer, comer fora) — visão ${map[granularity.value] ?? ''}.`
 })
 
 function onDateRange({ start, end }) {
@@ -82,13 +113,13 @@ function onDateRange({ start, end }) {
       </p>
     </section>
 
-    <div v-if="isLoadingData" class="dash-loading">
+    <div v-if="isLoading" class="dash-loading">
       <span class="spinner-ui spinner-ui--sm" aria-hidden="true"></span>
       Carregando dados…
     </div>
 
     <div v-else class="charts-grid">
-      <article class="chart-card panel">
+      <article class="chart-card panel chart-card--balance">
         <header class="chart-card__header">
           <h3 class="chart-card__title">Balanço — Receitas vs. Despesas</h3>
           <p class="chart-card__desc">{{ chartDescription }}</p>
@@ -97,6 +128,72 @@ function onDateRange({ start, end }) {
           :labels="chartLabels"
           :income-data="incomeData"
           :expense-data="expenseData"
+        />
+      </article>
+
+      <article class="chart-card panel chart-card--composition">
+        <header class="chart-card__header">
+          <h3 class="chart-card__title">Composição — Gastos por categoria</h3>
+          <p class="chart-card__desc">
+            Distribuição das despesas por categoria no período selecionado.
+          </p>
+        </header>
+        <CategoryPieChart :slices="categorySlices" />
+      </article>
+
+      <article class="chart-card panel chart-card--fixed-var">
+        <header class="chart-card__header">
+          <h3 class="chart-card__title">Custos — Fixo vs. Variável</h3>
+          <p class="chart-card__desc">{{ fixedVarDescription }}</p>
+        </header>
+        <FixedVsVariableChart
+          :labels="fixedVarLabels"
+          :fixed="fixedCostData"
+          :variable="variableCostData"
+        />
+      </article>
+
+      <article class="chart-card panel chart-card--reimbursement">
+        <header class="chart-card__header">
+          <h3 class="chart-card__title">Reembolsos</h3>
+          <p class="chart-card__desc">
+            Valores a receber (pendentes) versus já quitados.
+          </p>
+        </header>
+        <ReimbursementKPI :claims="reimbursementClaims" />
+      </article>
+
+      <article class="chart-card panel chart-card--category-evolution">
+        <header class="chart-card__header chart-card__header--toolbar">
+          <div class="chart-card__intro">
+            <h3 class="chart-card__title">Categorias — Evolução de gastos</h3>
+            <p class="chart-card__desc">
+              Despesas da categoria selecionada ao longo do período (uma categoria por vez).
+            </p>
+          </div>
+          <div class="category-filter">
+            <label class="category-filter__label" for="dash-category">Categoria</label>
+            <select
+              id="dash-category"
+              v-model="selectedCategoryId"
+              class="app-select category-filter__select"
+              :disabled="!expenseCategories.length"
+            >
+              <option
+                v-for="cat in expenseCategories"
+                :key="cat.id"
+                :value="cat.id"
+              >
+                {{ cat.name }}
+              </option>
+            </select>
+          </div>
+        </header>
+        <CategoryEvolutionLineChart
+          :labels="categoryEvolutionLabels"
+          :values="categoryEvolutionValues"
+          :category-name="categoryEvolutionName"
+          :color="categoryEvolutionColor"
         />
       </article>
     </div>
@@ -158,6 +255,68 @@ function onDateRange({ start, end }) {
 .charts-grid {
   display: grid;
   gap: 20px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 960px) {
+  .charts-grid {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+
+  /* Linha 1: balanço em largura total */
+  .chart-card--balance {
+    grid-column: 1 / -1;
+  }
+
+  /* Linha 2: pizza à esquerda; direita vazia */
+  .chart-card--composition {
+    grid-column: 1;
+  }
+
+  /* Linha 3: fixo/variável à esquerda, reembolsos à direita */
+  .chart-card--fixed-var {
+    grid-column: 1;
+  }
+
+  .chart-card--reimbursement {
+    grid-column: 2;
+  }
+
+  /* Linha 4: evolução por categoria em largura total */
+  .chart-card--category-evolution {
+    grid-column: 1 / -1;
+  }
+}
+
+.chart-card__header--toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.chart-card__intro {
+  flex: 1;
+  min-width: 200px;
+}
+
+.category-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.category-filter__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.category-filter__select {
+  min-width: 200px;
 }
 
 .chart-card {

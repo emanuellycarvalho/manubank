@@ -183,4 +183,70 @@ final class ReimbursementController
             'month_year'             => $row['month_year'],
         ], $rows);
     }
+
+    /**
+     * Resumo de reembolsos para o dashboard (pendente vs. quitado).
+     *
+     * @return array{
+     *   pending_amount: float,
+     *   settled_amount: float,
+     *   claims: array<int, array{
+     *     id: int,
+     *     description: string,
+     *     expected_amount: float,
+     *     paid_amount: float,
+     *     outstanding_amount: float,
+     *     status: string
+     *   }>
+     * }
+     */
+    public function getDashboardSummary(): array
+    {
+        $stmt = $this->pdo->query(
+            "SELECT
+                rc.id,
+                rc.description,
+                rc.expected_amount,
+                rc.status,
+                COALESCE((
+                    SELECT SUM(rp.paid_amount)
+                    FROM reimbursement_payments rp
+                    WHERE rp.claim_id = rc.id
+                ), 0) AS paid_amount
+             FROM reimbursement_claims rc
+             ORDER BY rc.id DESC"
+        );
+
+        $claims         = [];
+        $pendingAmount  = 0.0;
+        $settledAmount  = 0.0;
+
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $expected    = (float) $row['expected_amount'];
+            $paid        = (float) $row['paid_amount'];
+            $status      = (string) $row['status'];
+            $outstanding = max(0.0, round($expected - $paid, 2));
+
+            if ($status === 'Quitado') {
+                $settledAmount += $expected;
+            } else {
+                $pendingAmount += $outstanding;
+            }
+
+            $claims[] = [
+                'id'                  => (int) $row['id'],
+                'description'         => (string) $row['description'],
+                'expected_amount'     => round($expected, 2),
+                'paid_amount'         => round($paid, 2),
+                'outstanding_amount'  => $outstanding,
+                'status'              => $status,
+            ];
+        }
+
+        return [
+            'pending_amount' => round($pendingAmount, 2),
+            'settled_amount' => round($settledAmount, 2),
+            'claims'         => $claims,
+        ];
+    }
 }

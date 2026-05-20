@@ -47,6 +47,10 @@ try {
     $method     = $_SERVER['REQUEST_METHOD'];
 
     if ($method === 'GET') {
+        if (isset($_GET['summary'])) {
+            jsonResponse(['success' => true, 'data' => $controller->getDashboardSummary()]);
+        }
+
         jsonResponse(['success' => true, 'data' => $controller->getActiveClaims()]);
     }
 

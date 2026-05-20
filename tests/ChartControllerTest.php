@@ -153,4 +153,104 @@ final class ChartControllerTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->controller->getAggregatedSeries('2026/02/01', '2026-03-31', 'month');
     }
+
+    public function testExpensesByCategoryGroupsAndFilters(): void
+    {
+        $this->pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Lazer', 'Variável', '#FF5500')");
+        $lazerId = (int) $this->pdo->lastInsertId();
+        $geralId = (int) $this->pdo->query('SELECT id FROM categories WHERE name = "Geral"')->fetchColumn();
+
+        $this->pdo->exec(
+            "INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES ({$lazerId}, 'saída', '2026-02-15', 'Test', 'op', 300.00, 'Cinema', '2026-02')"
+        );
+
+        $result = $this->controller->getExpensesByCategory('2026-02-01', '2026-03-31');
+
+        $this->assertArrayHasKey('categories', $result);
+        $this->assertGreaterThanOrEqual(2, count($result['categories']));
+
+        $byName = [];
+        foreach ($result['categories'] as $row) {
+            $byName[$row['name']] = $row;
+        }
+
+        $this->assertArrayHasKey('Lazer', $byName);
+        $this->assertEqualsWithDelta(300.00, $byName['Lazer']['amount'], 0.01);
+        $this->assertSame('#FF5500', $byName['Lazer']['color']);
+
+        $this->assertArrayHasKey('Geral', $byName);
+        $this->assertEqualsWithDelta(350.00, $byName['Geral']['amount'], 0.01);
+    }
+
+    public function testFixedVsVariableSeriesByMonth(): void
+    {
+        $this->pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Assinaturas', 'Fixo', '#253762')");
+        $fixoId = (int) $this->pdo->lastInsertId();
+        $geralId = (int) $this->pdo->query('SELECT id FROM categories WHERE name = "Geral"')->fetchColumn();
+
+        $this->pdo->exec(
+            "INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES ({$fixoId}, 'saída', '2026-03-05', 'Test', 'op', 80.00, 'Netflix', '2026-03')"
+        );
+
+        $result = $this->controller->getFixedVsVariableSeries('2026-02-01', '2026-03-31', 'month');
+
+        $this->assertCount(2, $result['series']);
+        $mar = $result['series'][1];
+        $this->assertSame('2026-03', $mar['period_label']);
+        $this->assertEqualsWithDelta(80.00, $mar['fixed'], 0.01);
+        $this->assertEqualsWithDelta(150.00, $mar['variable'], 0.01);
+    }
+
+    public function testCategoryEvolutionSeriesForSingleCategory(): void
+    {
+        $this->pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Lazer', 'Variável', '#A09CD9')");
+        $lazerId = (int) $this->pdo->lastInsertId();
+
+        $this->pdo->exec(
+            "INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES ({$lazerId}, 'saída', '2026-02-10', 'Test', 'op', 50.00, 'Cinema', '2026-02')"
+        );
+        $this->pdo->exec(
+            "INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES ({$lazerId}, 'saída', '2026-03-05', 'Test', 'op', 75.00, 'Show', '2026-03')"
+        );
+
+        $result = $this->controller->getCategoryEvolutionSeries(
+            '2026-02-01',
+            '2026-03-31',
+            'month',
+            $lazerId,
+        );
+
+        $this->assertSame('Lazer', $result['category_name']);
+        $this->assertCount(2, $result['series']);
+        $this->assertEqualsWithDelta(50.00, $result['series'][0]['amount'], 0.01);
+        $this->assertEqualsWithDelta(75.00, $result['series'][1]['amount'], 0.01);
+    }
+
+    public function testExpensesByCategoryExcludesIncomeAndOutOfRange(): void
+    {
+        $catId = (int) $this->pdo->query('SELECT id FROM categories LIMIT 1')->fetchColumn();
+        $this->pdo->exec(
+            "INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES ({$catId}, 'entrada', '2026-02-10', 'Test', 'op', 999.00, 'Salario', '2026-02')"
+        );
+        $this->pdo->exec(
+            "INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES ({$catId}, 'saída', '2025-12-01', 'Test', 'op', 500.00, 'Antiga', '2025-12')"
+        );
+
+        $result = $this->controller->getExpensesByCategory('2026-02-01', '2026-02-28');
+        $total  = array_sum(array_column($result['categories'], 'amount'));
+
+        $this->assertEqualsWithDelta(200.00, $total, 0.01);
+    }
 }
