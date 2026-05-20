@@ -6,6 +6,7 @@ const activeTab = ref('dashboard')
 
 const moduleComponents = {
   dashboard: defineAsyncComponent(() => import('@/components/help/HelpDashboard.vue')),
+  importar:  defineAsyncComponent(() => import('@/components/help/HelpImport.vue')),
 }
 
 const activeModule = computed(() =>
@@ -59,7 +60,7 @@ function selectTab(id) {
     >
       <header v-if="activeModule" class="help-content__head">
         <h3 class="help-content__title">{{ activeModule.label }}</h3>
-        <p v-if="activeModule.comingSoon && activeTab !== 'dashboard'" class="help-content__soon">
+        <p v-if="activeModule?.comingSoon && !ActiveContent" class="help-content__soon">
           O texto completo deste módulo será publicado em uma próxima atualização da Ajuda.
         </p>
       </header>

@@ -18,7 +18,7 @@ const pasteYear = ref(new Date().getFullYear())
 const isLoading = ref(false)
 const result    = ref(null)
 
-const ACCEPT_ATTR = 'application/pdf,.pdf,text/csv,.csv'
+const ACCEPT_ATTR = 'text/csv,.csv'
 
 function pickFile(file) {
   if (!file) return
@@ -95,7 +95,7 @@ function reset() {
       <div>
         <h2 class="page-title">Importar Extrato</h2>
         <p class="page-subtitle">
-          Envie um ficheiro ou cole o texto da fatura Nubank.
+          Cole o texto da fatura Nubank ou envie um CSV do Mercado Pago.
           <span v-if="profileName" class="page-subtitle__hint">
             Pix com «{{ profileName }}» na descrição serão marcados como movimentação interna.
           </span>
@@ -157,12 +157,11 @@ function reset() {
           <h3 class="instructions__title">Como importar</h3>
           <ol class="instructions__list">
             <li>
-              <strong>Ficheiro (à direita)</strong> — arraste ou selecione um PDF da fatura Nubank
-              ou um CSV do Mercado Pago.
+              <strong>Colar texto</strong> — use o separador «Colar texto» para a fatura do cartão
+              Nubank (linhas copiadas do site ou app: data, cartão e valor).
             </li>
             <li>
-              <strong>Colar texto</strong> — use o separador «Colar texto» para linhas copiadas
-              da fatura de crédito Nubank (data, cartão e valor).
+              <strong>Enviar ficheiro</strong> — arraste ou selecione um CSV exportado do Mercado Pago.
             </li>
             <li>
               Clique em <strong>Importar</strong>. As transações são categorizadas pelas regras
@@ -224,7 +223,7 @@ function reset() {
               <p class="dropzone__text">
                 Arraste o ficheiro aqui ou <span class="link">clique para selecionar</span>
               </p>
-              <p class="dropzone__hint">PDF (Nubank) · CSV (Mercado Pago)</p>
+              <p class="dropzone__hint">CSV (Mercado Pago)</p>
             </template>
 
             <template v-else>
