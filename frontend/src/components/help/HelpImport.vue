@@ -120,11 +120,11 @@ const TOC = [
         <ol class="help-steps">
           <li>Clique na aba <strong>Enviar ficheiro</strong>.</li>
           <li>
-            Na área tracejada, <strong>arraste</strong> o ficheiro até lá ou <strong>clique</strong> na área
-            para abrir a janela de escolha de ficheiro do sistema.
+            Na área tracejada, <strong>arraste</strong> um ou vários ficheiros ou <strong>clique</strong> na área
+            para abrir a janela de escolha (pode selecionar vários CSV de uma vez).
           </li>
-          <li>Confirme o nome e o tamanho do ficheiro mostrados. Para trocar, use o botão ✕ no canto.</li>
-          <li>Clique no botão grande <strong>Importar</strong> no fundo do painel.</li>
+          <li>Confirme a lista de ficheiros. Remova um com ✕ ou use <strong>Limpar todos</strong>; <strong>+ Adicionar mais ficheiros</strong> inclui outros sem perder os já escolhidos.</li>
+          <li>Clique no botão grande <strong>Importar</strong> (ou <strong>Importar N ficheiros</strong> quando houver mais de um).</li>
         </ol>
         <p class="help-note">
           Se o ficheiro não for um CSV válido do Mercado Pago, aparece erro de tipo não suportado.
@@ -203,9 +203,10 @@ const TOC = [
       <div class="help-card-block">
         <h4 class="help-h4">Importação concluída (sucesso)</h4>
         <ul class="help-list">
-          <li><strong>importadas</strong> — quantas linhas novas foram gravadas.</li>
-          <li><strong>ignoradas</strong> — duplicados, linhas inválidas ou que o sistema decidiu não inserir.</li>
-          <li><strong>Meses processados</strong> — lista por mês (ex.: 04/2026) com quantas transações caíram naquele mês.</li>
+          <li><strong>importadas</strong> e <strong>ignoradas</strong> — totais de todos os ficheiros (ou do texto colado).</li>
+          <li><strong>Por ficheiro</strong> — quando importou vários CSV, lista o resultado de cada um (importadas/ignoradas ou mensagem de erro).</li>
+          <li><strong>Importação parcial</strong> — se alguns ficheiros deram certo e outros falharam, o título avisa e o detalhe mostra qual falhou.</li>
+          <li><strong>Meses processados (total)</strong> — soma por mês de todos os ficheiros importados com sucesso.</li>
         </ul>
         <p>
           O link <strong>Ver no extrato →</strong> abre o Extrato para você conferir categorias e valores.

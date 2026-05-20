@@ -626,5 +626,8 @@ const pageTitle = computed(() => route.meta?.title ?? 'ManuBank')
   padding: 28px 32px;
   background: var(--color-bg-primary);
   color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 </style>
