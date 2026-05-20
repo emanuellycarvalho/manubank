@@ -63,6 +63,7 @@ final class RuleEngineTest extends TestCase
         );
         $stmt->execute([$catTransporte, 'uber', 'Transporte']);
         $stmt->execute([$catLazer, 'karinefernanda', 'CEU']);
+        $stmt->execute([$catTransporte, 'CAFÉ', 'Cafeteria']);
 
         $this->engine = new \RuleEngine($this->pdo);
     }
@@ -77,6 +78,9 @@ final class RuleEngineTest extends TestCase
             'match uber uppercase'    => ['PAGAMENTO UBER TRIP', 'Transporte', false],
             'match case-insensitive'  => ['karinefernanda recebimento', 'CEU', false],
             'match mixed case'        => ['KARINEFERNANDA PIX', 'CEU', false],
+            'match rule uppercase'  => ['compra UBER viagem', 'Transporte', false],
+            'match utf8 accent'       => ['pagamento café manhã', 'Cafeteria', false],
+            'match utf8 accent upper' => ['PAGAMENTO CAFÉ', 'Cafeteria', false],
             'no match fallback'       => ['LOJA DESCONHECIDA XYZ', 'LOJA DESCONHECIDA XYZ', true],
             'no match empty-like'     => ['abc def', 'abc def', true],
         ];

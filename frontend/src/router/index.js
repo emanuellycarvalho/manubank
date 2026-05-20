@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard    from '@/views/Dashboard.vue'
 import Categories   from '@/views/Categories.vue'
+import Rules        from '@/views/Rules.vue'
 import Transactions from '@/views/Transactions.vue'
 import Import       from '@/views/Import.vue'
 
@@ -16,6 +17,12 @@ const routes = [
     name: 'Categories',
     component: Categories,
     meta: { title: 'Categorias' },
+  },
+  {
+    path: '/regras',
+    name: 'Rules',
+    component: Rules,
+    meta: { title: 'Regras' },
   },
   {
     path: '/extrato',
@@ -37,7 +44,7 @@ const router = createRouter({
 })
 
 router.afterEach((to) => {
-  document.title = `${to.meta.title ?? 'Finanças'} — Finanças Pessoais`
+  document.title = `${to.meta.title ?? 'ManuBank'} — ManuBank`
 })
 
 export default router

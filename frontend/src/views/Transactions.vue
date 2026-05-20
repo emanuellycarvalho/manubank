@@ -5,6 +5,29 @@ import RuleModal                  from '@/components/RuleModal.vue'
 import ReimbursementClaimModal    from '@/components/ReimbursementClaimModal.vue'
 import ReimbursementPaymentModal  from '@/components/ReimbursementPaymentModal.vue'
 import ConfirmModal               from '@/components/ConfirmModal.vue'
+import ManualTransactionModal     from '@/components/ManualTransactionModal.vue'
+import { useTableSort }           from '@/composables/useTableSort.js'
+import { fmtMonthYear }           from '@/utils/dates.js'
+import { formatTxDescription }    from '@/utils/text.js'
+
+const TX_SORT_COLS = [
+  { key: 'date',        getValue: (t) => t.date },
+  { key: 'origin',      getValue: (t) => t.origin },
+  { key: 'operation',   getValue: (t) => t.operation },
+  { key: 'description', getValue: (t) => formatTxDescription(t) },
+  { key: 'category',    getValue: (t) => t.category_name },
+  { key: 'amount',      getValue: (t) => t.amount },
+]
+
+const TX_HEADERS = [
+  { key: 'date',        label: 'Data',      sortable: true },
+  { key: 'origin',      label: 'Origem',    sortable: true },
+  { key: 'operation',   label: 'Operação',  sortable: true },
+  { key: 'description', label: 'Descrição', sortable: true },
+  { key: 'category',    label: 'Categoria', sortable: true },
+  { key: 'amount',      label: 'Valor',     sortable: true },
+  { key: 'actions',     label: 'Ações',     sortable: false },
+]
 
 // ── State ──────────────────────────────────────────────────────────────────
 const transactions     = ref([])
@@ -13,6 +36,8 @@ const selectedMonth    = ref('')
 const isLoading        = ref(false)
 const errorMsg         = ref('')
 const categories       = ref([])
+const searchQuery      = ref('')
+const showManualModal  = ref(false)
 
 // ── Period config (persisted in localStorage) ──────────────────────────────
 const STORAGE_KEY = 'finance_period_start_day'
@@ -114,6 +139,38 @@ const totalSaida = computed(() =>
     .filter(t => t.type === 'saída')
     .reduce((s, t) => s + t.amount, 0)
 )
+
+const filteredTransactions = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return transactions.value
+
+  return transactions.value.filter((tx) => {
+    const haystack = [
+      formatTxDescription(tx),
+      tx.raw_description,
+      tx.translated_description,
+      tx.origin,
+      tx.operation,
+      tx.category_name,
+      tx.type,
+      fmtDate(tx.date),
+      fmt(tx.amount),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+
+    return haystack.includes(q)
+  })
+})
+
+const { sortedItems: sortedTransactions, toggleSort, sortClass } = useTableSort(
+  filteredTransactions,
+  TX_SORT_COLS,
+  { key: 'date', dir: 'desc' },
+)
+
+const hasSearchFilter = computed(() => searchQuery.value.trim().length > 0)
 
 // ── Formatting ─────────────────────────────────────────────────────────────
 function fmt(amount) {
@@ -248,6 +305,19 @@ function cancelDelete() {
   if (!isDeleting.value) txToDelete.value = null
 }
 
+async function onManualTransactionSaved(tx) {
+  showManualModal.value = false
+  const month = tx?.month_year
+  if (month && !availableMonths.value.includes(month)) {
+    availableMonths.value = [month, ...availableMonths.value].sort().reverse()
+  }
+  if (month && selectedMonth.value && selectedMonth.value !== month) {
+    selectedMonth.value = month
+  }
+  await loadTransactions()
+  showToast('Transação adicionada.')
+}
+
 async function confirmDelete() {
   if (!txToDelete.value) return
   isDeleting.value = true
@@ -274,8 +344,8 @@ async function confirmDelete() {
         <p class="page-subtitle">Histórico de transações importadas</p>
       </div>
 
-      <!-- Month filter + period display -->
-      <div class="filter-group">
+      <div class="header-actions">
+        <div class="filter-group">
         <div class="filter-label-row">
           <label class="filter-label" for="month-select">Período</label>
           <button class="btn-period-config" title="Configurar dia de início" @click="showPeriodConfig = !showPeriodConfig">
@@ -303,12 +373,13 @@ async function confirmDelete() {
         >
           <option value="">Todos os meses</option>
           <option v-for="m in availableMonths" :key="m" :value="m">
-            {{ m }}
+            {{ fmtMonthYear(m) }}
           </option>
         </select>
         <span v-if="selectedMonth" class="period-range">
           {{ periodLabel(selectedMonth) }}
         </span>
+        </div>
       </div>
     </header>
 
@@ -352,33 +423,65 @@ async function confirmDelete() {
       Carregando transações…
     </div>
 
-    <!-- Empty -->
-    <div v-else-if="!transactions.length && !isLoading" class="empty-state">
-      <unicon name="file-alt" width="48" height="48" />
-      <p>Nenhuma transação encontrada. <RouterLink to="/importar">Importe um extrato</RouterLink>.</p>
-    </div>
+    <template v-else>
+      <div class="table-toolbar">
+        <label v-if="transactions.length" class="search-field">
+          <span class="search-field__label">Buscar</span>
+          <input
+            v-model="searchQuery"
+            type="search"
+            class="form-control search-field__input"
+            placeholder="Descrição, categoria, origem, valor…"
+            autocomplete="off"
+          />
+        </label>
+        <p v-if="hasSearchFilter" class="search-hint">
+          {{ sortedTransactions.length }} de {{ transactions.length }} transações
+        </p>
+        <button type="button" class="btn btn--primary" @click="showManualModal = true">
+          <unicon name="plus" width="16" height="16" />
+          Nova transação
+        </button>
+      </div>
 
-    <!-- Table -->
-    <div v-else class="card table-wrapper" :class="{ 'is-resizing': isResizing }">
+      <div v-if="!transactions.length" class="empty-state">
+        <unicon name="file-alt" width="48" height="48" />
+        <p>Nenhuma transação encontrada. <RouterLink to="/importar">Importe um extrato</RouterLink> ou adicione manualmente.</p>
+      </div>
+
+      <div v-else-if="!sortedTransactions.length" class="empty-state empty-state--compact">
+        <p>Nenhuma transação corresponde à busca.</p>
+      </div>
+
+      <div v-else class="card table-wrapper" :class="{ 'is-resizing': isResizing }">
       <table class="table">
         <colgroup>
           <col v-for="(w, i) in colWidths" :key="i" :style="{ width: w + 'px' }" />
         </colgroup>
         <thead>
           <tr>
-            <th v-for="(label, i) in ['Data','Origem','Operação','Descrição','Categoria','Valor','Ações']" :key="i">
-              {{ label }}
+            <th
+              v-for="(col, i) in TX_HEADERS"
+              :key="col.key"
+              :class="[
+                col.sortable && 'th-sortable',
+                col.sortable && sortClass(col.key),
+                col.key === 'actions' && 'col-actions',
+              ]"
+              @click="col.sortable && toggleSort(col.key)"
+            >
+              {{ col.label }}
               <div
                 v-if="i < 6"
                 class="resize-handle"
-                @mousedown="startResize(i, $event)"
+                @mousedown.stop="startResize(i, $event)"
               ></div>
             </th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="tx in transactions"
+            v-for="tx in sortedTransactions"
             :key="tx.id"
             :class="rowClass(tx.type)"
           >
@@ -386,7 +489,7 @@ async function confirmDelete() {
             <td class="td-clip">{{ tx.origin }}</td>
             <td class="td-clip">{{ tx.operation }}</td>
             <td>
-              <span class="desc-main">{{ tx.translated_description || tx.raw_description }}</span>
+              <span class="desc-main">{{ formatTxDescription(tx) }}</span>
               <span
                 v-if="tx.installment_current && tx.installment_total"
                 class="installment-badge"
@@ -458,9 +561,16 @@ async function confirmDelete() {
           </tr>
         </tbody>
       </table>
-    </div>
+      </div>
+    </template>
 
     <!-- ── Modais ── -->
+    <ManualTransactionModal
+      v-if="showManualModal"
+      @close="showManualModal = false"
+      @saved="onManualTransactionSaved"
+    />
+
     <RuleModal
       v-if="activeModal === 'rule' && selectedTx"
       :transaction="selectedTx"
@@ -512,6 +622,76 @@ async function confirmDelete() {
 }
 
 /* page-title/subtitle from global style.css */
+
+.header-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.btn.btn--primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  white-space: nowrap;
+}
+
+.btn.btn--primary:hover { filter: brightness(1.08); }
+
+.table-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.table-toolbar .btn--primary {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.search-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 200px;
+  max-width: none;
+}
+
+.search-field__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.search-field__input {
+  width: 100%;
+}
+
+.search-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  align-self: center;
+}
+
+.empty-state--compact {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
 
 /* ── Filter ── */
 .filter-group { display: flex; flex-direction: column; gap: 4px; min-width: 200px; }

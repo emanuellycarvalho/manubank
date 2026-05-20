@@ -32,6 +32,7 @@ export const transactionsApi = {
   availableMonths: () => http.get('/api_transactions.php', { params: { available_months: 1 } }),
   updateCategory: (id, categoryId) =>
     http.patch(`/api_transactions.php?id=${id}`, { category_id: categoryId }),
+  create: (payload) => http.post('/api_transactions.php', payload),
   remove: (id) => http.delete(`/api_transactions.php?id=${id}`),
 }
 
@@ -52,6 +53,7 @@ export const importApi = {
 export const rulesApi = {
   list: () => http.get('/api_rules.php'),
   create: (payload) => http.post('/api_rules.php', payload),
+  update: (id, payload) => http.put(`/api_rules.php?id=${id}`, payload),
   remove: (id) => http.delete(`/api_rules.php?id=${id}`),
 }
 

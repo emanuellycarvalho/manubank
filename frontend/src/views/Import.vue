@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { importApi } from '@/services/api.js'
+import { fmtMonthYear } from '@/utils/dates.js'
 
 const mode = ref('file')
 
@@ -118,7 +119,7 @@ function reset() {
             <p class="months-list__title">Meses processados:</p>
             <ul>
               <li v-for="(count, month) in result.month_year_groups" :key="month">
-                <strong>{{ month }}</strong> — {{ count }} transaç{{ count === 1 ? 'ão' : 'ões' }}
+                <strong>{{ fmtMonthYear(month) }}</strong> — {{ count }} transaç{{ count === 1 ? 'ão' : 'ões' }}
               </li>
             </ul>
           </div>
@@ -609,5 +610,15 @@ function reset() {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Abas do painel de importação: ícone acompanha o texto (accent no hover/ativo) */
+.panel--import .tab:hover {
+  color: var(--color-accent);
+}
+
+.panel--import .tab:hover :deep(svg),
+.panel--import .tab--active :deep(svg) {
+  fill: var(--color-accent);
 }
 </style>

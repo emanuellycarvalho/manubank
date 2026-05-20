@@ -45,7 +45,7 @@ final class RuleEngine
     /**
      * Aplica as regras de parsing a uma descrição bruta.
      *
-     * A correspondência é case-insensitive (stripos). A primeira regra
+     * A correspondência é case-insensitive (mb_stripos / stripos). A primeira regra
      * por ordem de id que coincidir é retornada; em caso de nenhum match,
      * retorna a descrição original e a categoria "Outros".
      *
@@ -54,7 +54,7 @@ final class RuleEngine
     public function applyRules(string $rawDescription): array
     {
         foreach ($this->rules as $rule) {
-            if (stripos($rawDescription, $rule['substring']) !== false) {
+            if ($this->containsSubstring($rawDescription, $rule['substring'])) {
                 return [
                     'translated_description' => $rule['translated_name'],
                     'category_id'            => $rule['category_id'],
@@ -83,6 +83,23 @@ final class RuleEngine
     // ---------------------------------------------------------------------------
     // Métodos privados
     // ---------------------------------------------------------------------------
+
+    /**
+     * Verifica se $needle ocorre em $haystack, sem distinguir maiúsculas/minúsculas.
+     * Usa mb_stripos (UTF-8) quando disponível; caso contrário, stripos (ASCII).
+     */
+    private function containsSubstring(string $haystack, string $needle): bool
+    {
+        if ($needle === '') {
+            return false;
+        }
+
+        if (function_exists('mb_stripos')) {
+            return mb_stripos($haystack, $needle, 0, 'UTF-8') !== false;
+        }
+
+        return stripos($haystack, $needle) !== false;
+    }
 
     /**
      * Carrega todas as regras ativas da tabela parsing_rules, ordenadas por id ASC.

@@ -6,6 +6,7 @@ declare(strict_types=1);
  * GET  /api_rules.php                    → lista todas as regras ativas
  * POST /api_rules.php                    → cria nova regra de parsing
  *      body: { "category_id": 3, "substring": "UBER", "translated_name": "Transporte" }
+ * PUT    /api_rules.php?id=5             → atualiza regra
  * DELETE /api_rules.php?id=5             → desativa regra (soft delete)
  */
 
@@ -13,7 +14,7 @@ require_once __DIR__ . '/../src/db/Database.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -156,6 +157,52 @@ try {
                 'transactions_updated' => $updated,
                 'already_existed'      => false,
             ], 201);
+        })(),
+
+        'PUT' => (function () use ($pdo, $id): void {
+            if ($id === null) {
+                jsonResponse(['error' => 'ID obrigatório para atualização.'], 400);
+            }
+
+            $body           = parseBody();
+            $categoryId     = isset($body['category_id']) ? (int) $body['category_id'] : 0;
+            $substring      = trim((string) ($body['substring'] ?? ''));
+            $translatedName = trim((string) ($body['translated_name'] ?? ''));
+
+            if ($categoryId <= 0 || $substring === '' || $translatedName === '') {
+                jsonResponse(['error' => 'Os campos category_id, substring e translated_name são obrigatórios.'], 422);
+            }
+
+            $exists = $pdo->prepare('SELECT id FROM parsing_rules WHERE id = ? AND is_active = 1');
+            $exists->execute([$id]);
+            if ($exists->fetch() === false) {
+                jsonResponse(['error' => 'Regra não encontrada.'], 404);
+            }
+
+            $check = $pdo->prepare('SELECT id FROM categories WHERE id = ? AND is_active = 1');
+            $check->execute([$categoryId]);
+            if ($check->fetch() === false) {
+                jsonResponse(['error' => "Categoria #{$categoryId} não encontrada."], 422);
+            }
+
+            $dup = $pdo->prepare(
+                'SELECT id FROM parsing_rules
+                 WHERE LOWER(substring) = LOWER(?) AND is_active = 1 AND id != ?
+                 LIMIT 1'
+            );
+            $dup->execute([$substring, $id]);
+            if ($dup->fetch() !== false) {
+                jsonResponse(['error' => 'Já existe outra regra ativa com esta substring.'], 409);
+            }
+
+            $stmt = $pdo->prepare(
+                'UPDATE parsing_rules
+                 SET category_id = ?, substring = ?, translated_name = ?
+                 WHERE id = ? AND is_active = 1'
+            );
+            $stmt->execute([$categoryId, $substring, $translatedName, $id]);
+
+            jsonResponse(['message' => 'Regra atualizada.']);
         })(),
 
         'DELETE' => (function () use ($pdo, $id): void {

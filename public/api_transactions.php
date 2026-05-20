@@ -6,6 +6,7 @@ declare(strict_types=1);
  * GET  /api_transactions.php                   → todas as transações
  * GET  /api_transactions.php?month_year=MM/YYYY → filtradas por mês
  * GET  /api_transactions.php?available_months=1 → lista de meses únicos disponíveis
+ * POST   /api_transactions.php                   → cria transação manual
  * PATCH /api_transactions.php?id=N              → atualiza category_id
  * DELETE /api_transactions.php?id=N            → exclui transação (e vínculos de reembolso)
  */
@@ -14,7 +15,7 @@ require_once __DIR__ . '/../src/db/Database.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, PATCH, DELETE, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -22,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-if (!in_array($_SERVER['REQUEST_METHOD'], ['GET', 'PATCH', 'DELETE'], true)) {
+if (!in_array($_SERVER['REQUEST_METHOD'], ['GET', 'POST', 'PATCH', 'DELETE'], true)) {
     http_response_code(405);
     echo json_encode(['error' => 'Método não suportado.'], JSON_UNESCAPED_UNICODE);
     exit;
@@ -38,8 +39,133 @@ function jsonResponse(mixed $data, int $status = 200): void
     exit;
 }
 
+/**
+ * @return array<string, mixed>
+ */
+function parseBody(): array
+{
+    $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+
+    if (!is_array($body)) {
+        jsonResponse(['error' => 'Corpo da requisição inválido.'], 400);
+    }
+
+    return $body;
+}
+
+/**
+ * @param array<string, mixed> $row
+ * @return array<string, mixed>
+ */
+function normalizeTransactionRow(array $row): array
+{
+    return [
+        'id'                     => (int)    $row['id'],
+        'type'                   =>           $row['type'],
+        'date'                   =>           $row['date'],
+        'origin'                 =>           $row['origin'],
+        'operation'              =>           $row['operation'],
+        'amount'                 => (float)  $row['amount'],
+        'raw_description'        =>           $row['raw_description'],
+        'translated_description' =>           $row['translated_description'],
+        'installment_current'    => $row['installment_current'] !== null ? (int) $row['installment_current'] : null,
+        'installment_total'      => $row['installment_total']   !== null ? (int) $row['installment_total']   : null,
+        'month_year'             =>           $row['month_year'],
+        'category_id'            => (int)    $row['category_id'],
+        'category_name'          =>           $row['category_name'],
+        'category_color'         =>           $row['category_color'],
+    ];
+}
+
 try {
     $pdo = Database::getConnection();
+
+    // ── POST /api_transactions.php ───────────────────────────────────────────
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $body = parseBody();
+
+        $type        = trim((string) ($body['type'] ?? ''));
+        $date        = trim((string) ($body['date'] ?? ''));
+        $origin      = trim((string) ($body['origin'] ?? 'Manual'));
+        $operation   = trim((string) ($body['operation'] ?? 'Lançamento manual'));
+        $categoryId  = isset($body['category_id']) ? (int) $body['category_id'] : 0;
+        $amount      = isset($body['amount']) ? (float) $body['amount'] : 0.0;
+        $rawDesc     = trim((string) ($body['raw_description'] ?? $body['description'] ?? ''));
+        $translated  = trim((string) ($body['translated_description'] ?? $rawDesc));
+
+        $allowedTypes = ['entrada', 'saída', 'rendimento'];
+
+        if (!in_array($type, $allowedTypes, true)) {
+            jsonResponse(['error' => 'Tipo inválido. Use: entrada, saída ou rendimento.'], 422);
+        }
+
+        if ($date === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            jsonResponse(['error' => 'Data inválida. Use o formato AAAA-MM-DD.'], 422);
+        }
+
+        if ($categoryId <= 0 || $rawDesc === '' || $translated === '') {
+            jsonResponse(['error' => 'category_id, data e descrição são obrigatórios.'], 422);
+        }
+
+        if ($amount <= 0) {
+            jsonResponse(['error' => 'O valor deve ser maior que zero.'], 422);
+        }
+
+        if ($origin === '') {
+            $origin = 'Manual';
+        }
+
+        if ($operation === '') {
+            $operation = 'Lançamento manual';
+        }
+
+        $check = $pdo->prepare('SELECT id FROM categories WHERE id = ? AND is_active = 1');
+        $check->execute([$categoryId]);
+        if ($check->fetch() === false) {
+            jsonResponse(['error' => "Categoria #{$categoryId} não encontrada."], 422);
+        }
+
+        $monthYear = substr($date, 0, 7);
+
+        $stmt = $pdo->prepare(
+            'INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description,
+                 translated_description, installment_current, installment_total, month_year, external_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL)'
+        );
+        $stmt->execute([
+            $categoryId,
+            $type,
+            $date,
+            $origin,
+            $operation,
+            $amount,
+            $rawDesc,
+            $translated,
+            $monthYear,
+        ]);
+
+        $newId = (int) $pdo->lastInsertId();
+
+        $fetch = $pdo->prepare(
+            "SELECT
+                t.id, t.type, t.date, t.origin, t.operation, t.amount,
+                t.raw_description, t.translated_description,
+                t.installment_current, t.installment_total, t.month_year,
+                t.category_id, c.name AS category_name, c.color AS category_color
+             FROM transactions t
+             JOIN categories c ON c.id = t.category_id
+             WHERE t.id = ?"
+        );
+        $fetch->execute([$newId]);
+        $row = $fetch->fetch();
+
+        if ($row === false) {
+            jsonResponse(['error' => 'Transação criada mas não foi possível carregá-la.'], 500);
+        }
+
+        jsonResponse(normalizeTransactionRow($row), 201);
+    }
 
     // ── DELETE /api_transactions.php?id=N ────────────────────────────────────
     if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
@@ -155,25 +281,10 @@ try {
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
 
-    // Normaliza tipos numéricos para JSON correto
-    $transactions = array_map(static function (array $row): array {
-        return [
-            'id'                     => (int)    $row['id'],
-            'type'                   =>           $row['type'],
-            'date'                   =>           $row['date'],
-            'origin'                 =>           $row['origin'],
-            'operation'              =>           $row['operation'],
-            'amount'                 => (float)  $row['amount'],
-            'raw_description'        =>           $row['raw_description'],
-            'translated_description' =>           $row['translated_description'],
-            'installment_current'    => $row['installment_current'] !== null ? (int) $row['installment_current'] : null,
-            'installment_total'      => $row['installment_total']   !== null ? (int) $row['installment_total']   : null,
-            'month_year'             =>           $row['month_year'],
-            'category_id'            => (int)    $row['category_id'],
-            'category_name'          =>           $row['category_name'],
-            'category_color'         =>           $row['category_color'],
-        ];
-    }, $rows);
+    $transactions = array_map(
+        static fn(array $row): array => normalizeTransactionRow($row),
+        $rows
+    );
 
     jsonResponse($transactions);
 } catch (Throwable $e) {

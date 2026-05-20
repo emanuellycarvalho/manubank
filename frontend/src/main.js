@@ -26,6 +26,10 @@ import {
   uniEditAlt,
   uniTrashAlt,
   uniPlus,
+  uniAngleLeftB,
+  uniAngleRightB,
+  uniBars,
+  uniUser,
 } from 'vue-unicons/dist/icons'
 
 Unicon.add([
@@ -51,6 +55,10 @@ Unicon.add([
   uniEditAlt,
   uniTrashAlt,
   uniPlus,
+  uniAngleLeftB,
+  uniAngleRightB,
+  uniBars,
+  uniUser,
 ])
 
 const app = createApp(App)

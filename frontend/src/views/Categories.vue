@@ -1,6 +1,14 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { categoriesApi } from '@/services/api.js'
+import { useTableSort } from '@/composables/useTableSort.js'
+
+const CATEGORY_SORT_COLS = [
+  { key: 'id',    getValue: (c) => c.id },
+  { key: 'name',  getValue: (c) => c.name },
+  { key: 'type',  getValue: (c) => c.type },
+  { key: 'color', getValue: (c) => c.color },
+]
 
 // ── State ──────────────────────────────────────────────────────────────────
 const categories  = ref([])
@@ -20,6 +28,12 @@ const TYPE_LABELS = {
   Variável:  { label: 'Variável', cls: 'badge--variavel'  },
   Neutro:    { label: 'Neutro',   cls: 'badge--neutro'    },
 }
+
+const { sortedItems: sortedCategories, toggleSort, sortClass } = useTableSort(
+  categories,
+  CATEGORY_SORT_COLS,
+  { key: 'name', dir: 'asc' },
+)
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const modalTitle = computed(() => isEditing.value ? 'Editar Categoria' : 'Nova Categoria')
@@ -160,15 +174,15 @@ onMounted(loadCategories)
       <table class="table">
         <thead>
           <tr>
-            <th>#</th>
-            <th>Nome</th>
-            <th>Tipo</th>
-            <th>Cor</th>
+            <th class="th-sortable" :class="sortClass('id')" @click="toggleSort('id')">#</th>
+            <th class="th-sortable" :class="sortClass('name')" @click="toggleSort('name')">Nome</th>
+            <th class="th-sortable" :class="sortClass('type')" @click="toggleSort('type')">Tipo</th>
+            <th class="th-sortable" :class="sortClass('color')" @click="toggleSort('color')">Cor</th>
             <th class="col-actions">Ações</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="cat in categories" :key="cat.id">
+          <tr v-for="cat in sortedCategories" :key="cat.id">
             <td class="col-id">{{ cat.id }}</td>
             <td class="col-name">{{ cat.name }}</td>
             <td>
@@ -190,22 +204,24 @@ onMounted(loadCategories)
               </div>
             </td>
             <td class="col-actions">
-              <button
-                class="btn btn--sm btn--outline"
-                @click="openEditModal(cat)"
-                title="Editar"
-              >
-                <unicon name="edit-alt" width="13" height="13" />
-                Editar
-              </button>
-              <button
-                class="btn btn--sm btn--danger"
-                @click="deactivate(cat)"
-                title="Desativar"
-              >
-                <unicon name="ban" width="13" height="13" />
-                Desativar
-              </button>
+              <div class="col-actions__inner">
+                <button
+                  class="btn btn--sm btn--outline"
+                  @click="openEditModal(cat)"
+                  title="Editar"
+                >
+                  <unicon name="edit-alt" width="13" height="13" />
+                  Editar
+                </button>
+                <button
+                  class="btn btn--sm btn--danger"
+                  @click="deactivate(cat)"
+                  title="Desativar"
+                >
+                  <unicon name="ban" width="13" height="13" />
+                  Desativar
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -346,7 +362,7 @@ onMounted(loadCategories)
 /* ── Card / Table ── */
 .card {
   background: var(--color-surface);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border-dark);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
@@ -354,19 +370,32 @@ onMounted(loadCategories)
 
 .table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .table th, .table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--color-border-subtle-dark); color: var(--color-text); }
-.table th { background: var(--color-surface-elevated); font-weight: 600; color: var(--color-text-muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; }
+.table th {
+  background: var(--color-surface);
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
 .table tbody tr:last-child td { border-bottom: none; }
-.table tbody tr:hover { background: var(--color-surface-elevated); }
+.table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
 
 .col-id     { width: 48px; color: var(--color-text-subtle); }
 .col-name   { font-weight: 500; }
-.col-actions { width: 200px; display: flex; gap: 8px; align-items: center; }
+.col-actions { width: 280px; min-width: 280px; }
+.col-actions__inner {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
 
 /* ── Badges ── */
 .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: .78rem; font-weight: 600; letter-spacing: .3px; }
-.badge--fixo     { background: var(--color-surface-elevated); color: var(--color-accent-secondary); border: 1px solid var(--color-accent-secondary); }
-.badge--variavel { background: var(--color-warning-bg); color: var(--color-warning); }
-.badge--neutro   { background: var(--color-surface-elevated); color: var(--color-text-muted); }
+.badge--fixo     { background: var(--color-surface-elevated); color: var(--color-text); }
+.badge--variavel { background: var(--color-warning-bg); color: var(--color-accent); }
+.badge--neutro   { background: #80808052; color: var(--color-text); }
 
 /* ── Color cell ── */
 .color-cell { display: flex; align-items: center; gap: 8px; }
