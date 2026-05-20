@@ -140,7 +140,6 @@ export function useDashboardCharts(startDate, endDate, granularity, selectedCate
       if (!fixedVarBody?.success) {
         throw new Error(fixedVarBody?.error ?? 'Resposta inválida da API fixo/variável.')
       }
-
       const series = seriesBody.data?.series ?? []
       chartLabels.value = series.map((row) =>
         fmtPeriodLabel(row.period_label, gran),
@@ -161,6 +160,7 @@ export function useDashboardCharts(startDate, endDate, granularity, selectedCate
       )
       fixedCostData.value    = fvSeries.map((row) => row.fixed)
       variableCostData.value = fvSeries.map((row) => row.variable)
+
     } catch (err) {
       dataError.value = err.message
       chartLabels.value      = []

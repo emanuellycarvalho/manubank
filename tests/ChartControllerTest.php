@@ -234,6 +234,50 @@ final class ChartControllerTest extends TestCase
         $this->assertEqualsWithDelta(75.00, $result['series'][1]['amount'], 0.01);
     }
 
+    public function testYieldGrowthSeriesMonthlyAndCumulative(): void
+    {
+        $catId = (int) $this->pdo->query('SELECT id FROM categories LIMIT 1')->fetchColumn();
+
+        $this->pdo->exec(
+            "INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES ({$catId}, 'rendimento', '2026-04-10', 'Test', 'op', 100.00, 'CDI', '2026-04')"
+        );
+        $this->pdo->exec(
+            "INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES ({$catId}, 'rendimento', '2026-05-20', 'Test', 'op', 50.00, 'CDI', '2026-05')"
+        );
+
+        $result = $this->controller->getYieldGrowthSeries('2026-04-01', '2026-05-31', 'month');
+
+        $this->assertSame(['2026-04', '2026-05'], $result['labels']);
+        $this->assertEqualsWithDelta([100.00, 50.00], $result['rendimento_mensal'], 0.01);
+        $this->assertEqualsWithDelta([100.00, 150.00], $result['rendimento_acumulado'], 0.01);
+    }
+
+    public function testYieldGrowthSeriesFillsEmptyMonthsWithZero(): void
+    {
+        $catId = (int) $this->pdo->query('SELECT id FROM categories LIMIT 1')->fetchColumn();
+
+        $this->pdo->exec(
+            "INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES ({$catId}, 'rendimento', '2026-07-15', 'Test', 'op', 25.00, 'CDI', '2026-07')"
+        );
+        $this->pdo->exec(
+            "INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES ({$catId}, 'rendimento', '2026-09-10', 'Test', 'op', 75.00, 'CDI', '2026-09')"
+        );
+
+        $result = $this->controller->getYieldGrowthSeries('2026-07-01', '2026-09-30', 'month');
+
+        $this->assertSame(['2026-07', '2026-08', '2026-09'], $result['labels']);
+        $this->assertEqualsWithDelta([25.00, 0.00, 75.00], $result['rendimento_mensal'], 0.01);
+        $this->assertEqualsWithDelta([25.00, 25.00, 100.00], $result['rendimento_acumulado'], 0.01);
+    }
+
     public function testExpensesByCategoryExcludesIncomeAndOutOfRange(): void
     {
         $catId = (int) $this->pdo->query('SELECT id FROM categories LIMIT 1')->fetchColumn();

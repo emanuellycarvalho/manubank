@@ -9,6 +9,12 @@ import ManualTransactionModal     from '@/components/ManualTransactionModal.vue'
 import { useTableSort }           from '@/composables/useTableSort.js'
 import { fmtMonthYear }           from '@/utils/dates.js'
 import { formatTxDescription }    from '@/utils/text.js'
+import {
+  financePeriodStartDay,
+  getFinancePeriodStartDay,
+  setFinancePeriodStartDay,
+  formatCycleLabel,
+} from '@/utils/periodCycle.js'
 
 const TX_SORT_COLS = [
   { key: 'date',        getValue: (t) => t.date },
@@ -49,38 +55,16 @@ const pageSize    = ref('25')
 const currentPage = ref(1)
 
 // ── Period config (persisted in localStorage) ──────────────────────────────
-const STORAGE_KEY = 'finance_period_start_day'
-const periodStartDay = ref(parseInt(localStorage.getItem(STORAGE_KEY) ?? '29', 10))
+const periodStartDay = financePeriodStartDay
 const showPeriodConfig = ref(false)
 
 function savePeriodStartDay() {
-  const day = Math.min(28, Math.max(1, periodStartDay.value))
-  periodStartDay.value = day
-  localStorage.setItem(STORAGE_KEY, String(day))
+  setFinancePeriodStartDay(periodStartDay.value)
   showPeriodConfig.value = false
 }
 
-/** Returns last business day on or before the given date */
-function lastBusinessDay(year, month, day) {
-  const daysInMonth = new Date(year, month, 0).getDate()
-  const d = Math.min(day, daysInMonth)
-  const dt = new Date(year, month - 1, d)
-  const dow = dt.getDay() // 0=Sun, 6=Sat
-  if (dow === 6) dt.setDate(dt.getDate() - 1)  // Sat → Fri
-  if (dow === 0) dt.setDate(dt.getDate() - 2)  // Sun → Fri
-  return dt
-}
-
-function fmtShort(dt) {
-  return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`
-}
-
 function periodLabel(monthYear) {
-  if (!monthYear) return ''
-  const [y, m] = monthYear.split('-').map(Number)
-  const start = lastBusinessDay(y, m - 1, periodStartDay.value)  // prev month
-  const end   = lastBusinessDay(y, m,     periodStartDay.value - 1) // this month, day before
-  return `${fmtShort(start)} – ${fmtShort(end)}`
+  return formatCycleLabel(monthYear, periodStartDay.value)
 }
 
 // Modal state — only one open at a time

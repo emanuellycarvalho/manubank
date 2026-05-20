@@ -222,6 +222,81 @@ final class ChartController
     }
 
     /**
+     * Rendimentos (type = rendimento) por período, com soma mensal e acumulado progressivo.
+     *
+     * @return array{
+     *   start_date: string,
+     *   end_date: string,
+     *   granularity: string,
+     *   labels: array<int, string>,
+     *   rendimento_mensal: array<int, float>,
+     *   rendimento_acumulado: array<int, float>
+     * }
+     */
+    public function getYieldGrowthSeries(string $startDate, string $endDate, string $granularity): array
+    {
+        $this->validateDate($startDate, 'start_date');
+        $this->validateDate($endDate, 'end_date');
+
+        if ($startDate > $endDate) {
+            throw new InvalidArgumentException("'start_date' não pode ser posterior a 'end_date'.");
+        }
+
+        $granularity = strtolower(trim($granularity));
+        if (!in_array($granularity, self::GRANULARITIES, true)) {
+            throw new InvalidArgumentException(
+                "Granularidade inválida. Use: " . implode(', ', self::GRANULARITIES) . '.'
+            );
+        }
+
+        $periodExpr = $this->periodLabelExpression($granularity);
+
+        $sql = <<<SQL
+            SELECT
+                {$periodExpr} AS period_label,
+                COALESCE(SUM(amount), 0) AS monthly_yield
+            FROM transactions
+            WHERE type = 'rendimento'
+              AND date >= :start_date
+              AND date <= :end_date
+            GROUP BY period_label
+            ORDER BY period_label ASC
+            SQL;
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([
+            ':start_date' => $startDate,
+            ':end_date'   => $endDate,
+        ]);
+
+        $byPeriod = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $byPeriod[(string) $row['period_label']] = round((float) $row['monthly_yield'], 2);
+        }
+
+        $labels            = $this->buildPeriodLabelRange($startDate, $endDate, $granularity);
+        $rendimentoMensal    = [];
+        $rendimentoAcumulado = [];
+        $running             = 0.0;
+
+        foreach ($labels as $label) {
+            $monthly = $byPeriod[$label] ?? 0.0;
+            $running += $monthly;
+            $rendimentoMensal[]    = $monthly;
+            $rendimentoAcumulado[] = round($running, 2);
+        }
+
+        return [
+            'start_date'            => $startDate,
+            'end_date'              => $endDate,
+            'granularity'           => $granularity,
+            'labels'                => $labels,
+            'rendimento_mensal'     => $rendimentoMensal,
+            'rendimento_acumulado'  => $rendimentoAcumulado,
+        ];
+    }
+
+    /**
      * Evolução de despesas de uma única categoria ao longo do período.
      *
      * @return array{
@@ -329,5 +404,94 @@ final class ChartController
             'semester' => "strftime('%Y', date) || '-S' || CASE WHEN CAST(strftime('%m', date) AS INTEGER) <= 6 THEN '1' ELSE '2' END",
             default => throw new InvalidArgumentException('Granularidade não suportada.'),
         };
+    }
+
+    /**
+     * Gera todos os period_label entre start e end para preencher lacunas no gráfico.
+     *
+     * @return array<int, string>
+     */
+    private function buildPeriodLabelRange(string $startDate, string $endDate, string $granularity): array
+    {
+        return match ($granularity) {
+            'day'      => $this->buildDayPeriodRange($startDate, $endDate),
+            'week'     => $this->buildWeekPeriodRange($startDate, $endDate),
+            'month'    => $this->buildMonthPeriodRange($startDate, $endDate),
+            'semester' => $this->buildSemesterPeriodRange($startDate, $endDate),
+            default    => [],
+        };
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function buildDayPeriodRange(string $startDate, string $endDate): array
+    {
+        $labels  = [];
+        $current = new \DateTimeImmutable($startDate);
+        $end     = new \DateTimeImmutable($endDate);
+
+        while ($current <= $end) {
+            $labels[] = $current->format('Y-m-d');
+            $current  = $current->modify('+1 day');
+        }
+
+        return $labels;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function buildWeekPeriodRange(string $startDate, string $endDate): array
+    {
+        $seen    = [];
+        $current = new \DateTimeImmutable($startDate);
+        $end     = new \DateTimeImmutable($endDate);
+
+        while ($current <= $end) {
+            $key = $current->format('Y') . '-' . sprintf('%02d', (int) $current->format('W'));
+            $seen[$key] = true;
+            $current    = $current->modify('+1 day');
+        }
+
+        $labels = array_keys($seen);
+        sort($labels, SORT_STRING);
+
+        return $labels;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function buildMonthPeriodRange(string $startDate, string $endDate): array
+    {
+        $labels  = [];
+        $current = new \DateTimeImmutable(substr($startDate, 0, 7) . '-01');
+        $end     = new \DateTimeImmutable(substr($endDate, 0, 7) . '-01');
+
+        while ($current <= $end) {
+            $labels[] = $current->format('Y-m');
+            $current  = $current->modify('+1 month');
+        }
+
+        return $labels;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function buildSemesterPeriodRange(string $startDate, string $endDate): array
+    {
+        $labels  = [];
+        $months  = $this->buildMonthPeriodRange($startDate, $endDate);
+
+        foreach ($months as $month) {
+            $year = (int) substr($month, 0, 4);
+            $m    = (int) substr($month, 5, 2);
+            $sem  = $m <= 6 ? 1 : 2;
+            $labels[] = "{$year}-S{$sem}";
+        }
+
+        return array_values(array_unique($labels));
     }
 }

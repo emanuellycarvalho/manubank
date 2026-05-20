@@ -121,6 +121,29 @@ function getTableDefinitions(): array
                     ON DELETE RESTRICT ON UPDATE CASCADE
             )
             SQL,
+
+        'investment_objectives' => <<<'SQL'
+            CREATE TABLE IF NOT EXISTS investment_objectives (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                name          TEXT NOT NULL,
+                target_amount REAL NOT NULL,
+                end_date      TEXT NOT NULL,
+                created_at    TEXT NOT NULL
+            )
+            SQL,
+
+        'investment_entries' => <<<'SQL'
+            CREATE TABLE IF NOT EXISTS investment_entries (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                objective_id INTEGER NOT NULL,
+                type         TEXT NOT NULL CHECK (type IN ('entrada', 'saída')),
+                amount       REAL NOT NULL,
+                date         TEXT NOT NULL,
+                description  TEXT,
+                FOREIGN KEY (objective_id) REFERENCES investment_objectives (id)
+                    ON DELETE CASCADE
+            )
+            SQL,
     ];
 }
 
@@ -137,6 +160,7 @@ function createIndexes(PDO $pdo): void
         'CREATE INDEX IF NOT EXISTS idx_investment_allocations_closure_id ON investment_allocations (monthly_closure_id)',
         'CREATE INDEX IF NOT EXISTS idx_reimbursement_claims_transaction_id ON reimbursement_claims (transaction_id)',
         'CREATE INDEX IF NOT EXISTS idx_reimbursement_payments_claim_id ON reimbursement_payments (claim_id)',
+        'CREATE INDEX IF NOT EXISTS idx_investment_entries_objective_id ON investment_entries (objective_id)',
     ];
 
     foreach ($indexes as $sql) {

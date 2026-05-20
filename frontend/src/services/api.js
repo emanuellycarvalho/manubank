@@ -94,6 +94,15 @@ export const chartsApi = {
         category_id: categoryId,
       },
     }),
+  getYieldGrowth: ({ startDate, endDate, granularity }) =>
+    http.get('/api_charts.php', {
+      params: {
+        start_date: startDate,
+        end_date: endDate,
+        granularity,
+        breakdown: 'yield_growth',
+      },
+    }),
 }
 
 // ── Closures ────────────────────────────────────────────────────────────────
@@ -104,6 +113,23 @@ export const closuresApi = {
     http.get(`/api_closures.php?month_year=${monthYear}&saved=1`),
   save: (payload) =>
     http.post('/api_closures.php', payload),
+}
+
+// ── Investments ─────────────────────────────────────────────────────────────
+export const investmentsApi = {
+  list: () => http.get('/api_investments.php'),
+  createObjective: (payload) =>
+    http.post('/api_investments.php', { action: 'create_objective', ...payload }),
+  updateObjective: (payload) =>
+    http.post('/api_investments.php', { action: 'update_objective', ...payload }),
+  removeObjective: (objectiveId) =>
+    http.delete(`/api_investments.php?objective_id=${objectiveId}`),
+  addEntry: (payload) =>
+    http.post('/api_investments.php', { action: 'add_entry', ...payload }),
+  updateEntry: (payload) =>
+    http.post('/api_investments.php', { action: 'update_entry', ...payload }),
+  removeEntry: (entryId) =>
+    http.delete(`/api_investments.php?entry_id=${entryId}`),
 }
 
 // ── Reimbursements ──────────────────────────────────────────────────────────

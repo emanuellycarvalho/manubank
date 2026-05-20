@@ -14,7 +14,8 @@
             "src/controllers/ImportController.php",
             "src/controllers/ReimbursementController.php",
             "src/controllers/ClosureController.php",
-            "src/controllers/ChartController.php"
+            "src/controllers/ChartController.php",
+            "src/controllers/InvestmentController.php"
         ]
     },
     "autoload-dev": {

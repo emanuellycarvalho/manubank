@@ -18,11 +18,13 @@ const {
 const brandLogoSrc = '/manubank-logo-1.png'
 
 const navLinks = [
-  { to: '/',           label: 'Dashboard',  icon: 'chart-pie' },
-  { to: '/categorias', label: 'Categorias', icon: 'tag-alt' },
-  { to: '/regras',     label: 'Regras',     icon: 'clipboard-alt' },
-  { to: '/extrato',    label: 'Extrato',    icon: 'file-alt' },
-  { to: '/importar',   label: 'Importar',   icon: 'upload-alt' },
+  { to: '/',              label: 'To do',         icon: 'estate' },
+  { to: '/dashboard',     label: 'Dashboard',     icon: 'chart-pie' },
+  { to: '/importar',      label: 'Importar',      icon: 'upload-alt' },
+  { to: '/extrato',       label: 'Extrato',       icon: 'file-alt' },
+  { to: '/investimentos', label: 'Investimentos', icon: 'wallet' },
+  { to: '/categorias',    label: 'Categorias',    icon: 'tag-alt' },
+  { to: '/regras',        label: 'Regras',        icon: 'clipboard-alt' },
 ]
 
 const isActive = (path) =>

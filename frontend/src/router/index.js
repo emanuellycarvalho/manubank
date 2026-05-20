@@ -1,16 +1,42 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import Home         from '@/views/Home.vue'
 import Dashboard    from '@/views/Dashboard.vue'
 import Categories   from '@/views/Categories.vue'
 import Rules        from '@/views/Rules.vue'
 import Transactions from '@/views/Transactions.vue'
 import Import       from '@/views/Import.vue'
+import Investments  from '@/views/Investments.vue'
 
 const routes = [
   {
     path: '/',
+    name: 'Home',
+    component: Home,
+    meta: { title: 'To do' },
+  },
+  {
+    path: '/dashboard',
     name: 'Dashboard',
     component: Dashboard,
     meta: { title: 'Dashboard' },
+  },
+  {
+    path: '/importar',
+    name: 'Import',
+    component: Import,
+    meta: { title: 'Importar' },
+  },
+  {
+    path: '/extrato',
+    name: 'Transactions',
+    component: Transactions,
+    meta: { title: 'Extrato' },
+  },
+  {
+    path: '/investimentos',
+    name: 'Investments',
+    component: Investments,
+    meta: { title: 'Investimentos' },
   },
   {
     path: '/categorias',
@@ -23,18 +49,6 @@ const routes = [
     name: 'Rules',
     component: Rules,
     meta: { title: 'Regras' },
-  },
-  {
-    path: '/extrato',
-    name: 'Transactions',
-    component: Transactions,
-    meta: { title: 'Extrato' },
-  },
-  {
-    path: '/importar',
-    name: 'Import',
-    component: Import,
-    meta: { title: 'Importar' },
   },
 ]
 

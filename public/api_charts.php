@@ -16,6 +16,9 @@ declare(strict_types=1);
  *
  * GET /api_charts.php?start_date=...&end_date=...&granularity=...&breakdown=category_evolution&category_id=N
  *     → evolução de despesas de uma categoria por period_label
+ *
+ * GET /api_charts.php?start_date=...&end_date=...&granularity=...&breakdown=yield_growth
+ *     → rendimento_mensal e rendimento_acumulado por período (type = rendimento)
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';
@@ -86,6 +89,11 @@ try {
             $granularity,
             $categoryId,
         );
+        jsonResponse(['success' => true, 'data' => $data]);
+    }
+
+    if ($breakdown === 'yield_growth') {
+        $data = $controller->getYieldGrowthSeries($startDate, $endDate, $granularity);
         jsonResponse(['success' => true, 'data' => $data]);
     }
 
