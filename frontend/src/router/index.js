@@ -5,6 +5,7 @@ import Rules        from '@/views/Rules.vue'
 import Transactions from '@/views/Transactions.vue'
 import Import       from '@/views/Import.vue'
 import Investments  from '@/views/Investments.vue'
+import Help         from '@/views/Help.vue'
 
 const routes = [
   {
@@ -46,6 +47,12 @@ const routes = [
     name: 'Rules',
     component: Rules,
     meta: { title: 'Regras' },
+  },
+  {
+    path: '/ajuda',
+    name: 'Help',
+    component: Help,
+    meta: { title: 'Ajuda' },
   },
 ]
 

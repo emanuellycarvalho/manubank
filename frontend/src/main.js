@@ -34,6 +34,7 @@ import {
   uniStarSolid,
   uniDollarSign,
   uniQuestionCircle,
+  uniBookOpen,
 } from 'vue-unicons/dist/icons'
 
 Unicon.add([
@@ -67,6 +68,7 @@ Unicon.add([
   uniStarSolid,
   uniDollarSign,
   uniQuestionCircle,
+  uniBookOpen,
 ])
 
 const app = createApp(App)

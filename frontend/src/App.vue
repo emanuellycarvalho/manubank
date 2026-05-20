@@ -24,6 +24,7 @@ const navLinks = [
   { to: '/investimentos', label: 'Investimentos', icon: 'wallet' },
   { to: '/categorias',    label: 'Categorias',    icon: 'tag-alt' },
   { to: '/regras',        label: 'Regras',        icon: 'clipboard-alt' },
+  { to: '/ajuda',         label: 'Ajuda',         icon: 'book-open' },
 ]
 
 const isActive = (path) => route.path.startsWith(path)
