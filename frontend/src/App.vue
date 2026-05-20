@@ -15,7 +15,7 @@ const {
   saveProfileName,
 } = useProfile()
 
-const brandLogoSrc = '/manubank-logo.svg'
+const brandLogoSrc = '/manubank-logo-1.png'
 
 const navLinks = [
   { to: '/',           label: 'Dashboard',  icon: 'chart-pie' },
@@ -53,7 +53,7 @@ const pageTitle = computed(() => route.meta?.title ?? 'ManuBank')
         </button>
 
         <div v-show="!sidebarCollapsed" class="sidebar-brand">
-          <img :src="brandLogoSrc" alt="" class="sidebar-brand-logo" width="28" height="28" />
+          <img :src="brandLogoSrc" alt="" class="sidebar-brand-logo" width="40" height="40" />
           <h1 class="sidebar-title">ManuBank</h1>
         </div>
 
@@ -230,8 +230,8 @@ const pageTitle = computed(() => route.meta?.title ?? 'ManuBank')
 }
 
 .sidebar-brand-logo {
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   object-fit: contain;
   display: block;
