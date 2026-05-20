@@ -90,16 +90,31 @@ const pageTitle = computed(() => route.meta?.title ?? 'ManuBank')
         </label>
 
         <div v-show="!sidebarCollapsed" class="profile-meta">
-          <input
-            v-model="profileName"
-            type="text"
-            class="profile-name-input"
-            placeholder="Seu nome"
-            maxlength="40"
-            aria-label="Nome do perfil"
-            @blur="saveProfileName"
-            @keydown.enter="$event.target.blur()"
-          />
+          <div class="profile-name-row">
+            <input
+              v-model="profileName"
+              type="text"
+              class="profile-name-input"
+              placeholder="Seu nome"
+              maxlength="40"
+              aria-label="Nome do perfil"
+              @blur="saveProfileName"
+              @keydown.enter="$event.target.blur()"
+            />
+            <span class="profile-name-help">
+              <button
+                type="button"
+                class="profile-name-help__btn"
+                aria-label="Para que serve o nome do perfil"
+              >
+                <unicon name="question-circle" width="16" height="16" fill="#e7e7e7" />
+              </button>
+              <span class="profile-name-help__tooltip" role="tooltip">
+                Na importação, descrições com este nome viram Movimentação interna
+                (Pix entre suas contas) e não entram em receitas nem despesas.
+              </span>
+            </span>
+          </div>
           <div class="profile-meta__actions">
             <span v-if="!profilePhoto" class="profile-meta__hint">Clique na foto para adicionar</span>
             <button
@@ -309,8 +324,16 @@ const pageTitle = computed(() => route.meta?.title ?? 'ManuBank')
   flex: 1;
 }
 
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 .profile-name-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   margin: 0;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -337,6 +360,81 @@ const pageTitle = computed(() => route.meta?.title ?? 'ManuBank')
   border-color: var(--color-accent);
   background: var(--color-bg-elevated);
   box-shadow: 0 0 0 2px rgba(197, 119, 0, 0.25);
+}
+
+.profile-name-help {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.profile-name-help__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #e7e7e7;
+  cursor: help;
+}
+
+.profile-name-help__btn :deep(svg) {
+  fill: #e7e7e7;
+}
+
+.profile-name-help__btn:hover,
+.profile-name-help__btn:focus-visible {
+  background: var(--color-bg-elevated);
+  outline: none;
+}
+
+.profile-name-help__btn:hover :deep(svg),
+.profile-name-help__btn:focus-visible :deep(svg) {
+  fill: #e7e7e7;
+}
+
+.profile-name-help__tooltip {
+  position: absolute;
+  z-index: 200;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 188px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-light);
+  box-shadow: var(--shadow-card, 0 4px 16px rgba(0, 0, 0, 0.35));
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--color-text);
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.profile-name-help__tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--color-border-light);
+}
+
+.profile-name-help:hover .profile-name-help__tooltip,
+.profile-name-help:focus-within .profile-name-help__tooltip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .profile-meta__actions {

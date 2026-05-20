@@ -44,7 +44,8 @@ final class ChartController
             );
         }
 
-        $periodExpr = $this->periodLabelExpression($granularity);
+        $periodExpr   = $this->periodLabelExpression($granularity);
+        $excludeSql   = InternalTransferService::sqlExcludeFromTotals('transactions');
 
         $sql = <<<SQL
             SELECT
@@ -55,6 +56,7 @@ final class ChartController
                 COUNT(*) AS transaction_count
             FROM transactions
             WHERE date >= :start_date AND date <= :end_date
+            {$excludeSql}
             GROUP BY period_label
             ORDER BY period_label ASC
             SQL;
@@ -108,7 +110,9 @@ final class ChartController
             throw new InvalidArgumentException("'start_date' não pode ser posterior a 'end_date'.");
         }
 
-        $sql = <<<'SQL'
+        $excludeSql = InternalTransferService::sqlExcludeFromTotals('t');
+
+        $sql = <<<SQL
             SELECT
                 c.id AS category_id,
                 c.name AS category_name,
@@ -120,6 +124,7 @@ final class ChartController
             WHERE t.type = 'saída'
               AND t.date >= :start_date
               AND t.date <= :end_date
+            {$excludeSql}
             GROUP BY c.id, c.name, c.color
             HAVING total_amount > 0
             ORDER BY total_amount DESC
@@ -181,6 +186,7 @@ final class ChartController
         }
 
         $periodExpr = $this->periodLabelExpression($granularity);
+        $excludeSql = InternalTransferService::sqlExcludeFromTotals('t');
 
         $sql = <<<SQL
             SELECT
@@ -193,6 +199,7 @@ final class ChartController
             WHERE t.type = 'saída'
               AND t.date >= :start_date
               AND t.date <= :end_date
+            {$excludeSql}
             GROUP BY period_label
             ORDER BY period_label ASC
             SQL;
@@ -344,6 +351,7 @@ final class ChartController
         }
 
         $periodExpr = $this->periodLabelExpression($granularity);
+        $excludeSql = InternalTransferService::sqlExcludeFromTotals('t');
 
         $sql = <<<SQL
             SELECT
@@ -355,6 +363,7 @@ final class ChartController
               AND t.category_id = :category_id
               AND t.date >= :start_date
               AND t.date <= :end_date
+            {$excludeSql}
             GROUP BY period_label
             ORDER BY period_label ASC
             SQL;

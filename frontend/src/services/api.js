@@ -39,15 +39,22 @@ export const transactionsApi = {
 
 // ── Import ──────────────────────────────────────────────────────────────────
 export const importApi = {
-  upload: (file) => {
+  upload: (file, profileName = '') => {
     const form = new FormData()
     form.append('file', file)
+    if (profileName.trim()) {
+      form.append('profile_name', profileName.trim())
+    }
     return http.post('/import.php', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
-  importText: (text, year) =>
-    http.post('/import_text.php', { text, year }),
+  importText: (text, year, profileName = '') => {
+    const payload = { text, year }
+    const trimmed = profileName.trim()
+    if (trimmed) payload.profile_name = trimmed
+    return http.post('/import_text.php', payload)
+  },
 }
 
 // ── Parsing Rules ───────────────────────────────────────────────────────────

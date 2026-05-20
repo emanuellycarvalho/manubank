@@ -206,11 +206,14 @@ final class ClosureController
      */
     private function calculateRollover(string $monthYear): float
     {
+        $excludeSql = InternalTransferService::sqlExcludeFromTotals('transactions');
+
         $stmt = $this->pdo->prepare(
             "SELECT COALESCE(SUM(CASE WHEN type = 'entrada' THEN amount ELSE -amount END), 0)
              FROM transactions
              WHERE origin = 'MercadoPago'
-               AND month_year < :month_year"
+               AND month_year < :month_year
+             {$excludeSql}"
         );
 
         $stmt->execute([':month_year' => $monthYear]);
@@ -223,11 +226,14 @@ final class ClosureController
      */
     private function sumIncome(string $monthYear): float
     {
+        $excludeSql = InternalTransferService::sqlExcludeFromTotals('transactions');
+
         $stmt = $this->pdo->prepare(
             "SELECT COALESCE(SUM(amount), 0)
              FROM transactions
              WHERE type = 'entrada'
-               AND month_year = :month_year"
+               AND month_year = :month_year
+             {$excludeSql}"
         );
 
         $stmt->execute([':month_year' => $monthYear]);

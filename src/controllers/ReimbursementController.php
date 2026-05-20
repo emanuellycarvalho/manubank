@@ -129,6 +129,8 @@ final class ReimbursementController
      */
     public function getEffectiveExpenses(string $monthYear): array
     {
+        $excludeSql = InternalTransferService::sqlExcludeFromTotals('t');
+
         $stmt = $this->pdo->prepare(
             "SELECT
                 c.id   AS category_id,
@@ -140,6 +142,7 @@ final class ReimbursementController
              LEFT JOIN reimbursement_claims rc ON rc.transaction_id = t.id
              WHERE t.type = 'saída'
                AND t.month_year = :month_year
+             {$excludeSql}
              GROUP BY c.id, c.name, c.color
              ORDER BY effective_amount DESC"
         );

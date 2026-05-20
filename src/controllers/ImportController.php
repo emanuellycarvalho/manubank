@@ -35,7 +35,8 @@ final class ImportController
      */
     public function __construct(
         private readonly PDO $pdo,
-        private readonly RuleEngine $ruleEngine
+        private readonly RuleEngine $ruleEngine,
+        private readonly ?InternalTransferService $internalTransfers = null,
     ) {
     }
 
@@ -93,7 +94,9 @@ final class ImportController
             ];
         }
 
-        return $this->persistTransactions($rows);
+        $profileName = trim((string) ($_POST['profile_name'] ?? ''));
+
+        return $this->persistTransactions($rows, $profileName);
     }
 
     // ---------------------------------------------------------------------------
@@ -150,9 +153,9 @@ final class ImportController
      * @param  array<int, array<string, mixed>> $rows
      * @return array{imported: int, skipped: int, month_year_groups: array<string, int>}
      */
-    public function persistFromRows(array $rows): array
+    public function persistFromRows(array $rows, string $profileName = ''): array
     {
-        return $this->persistTransactions($rows);
+        return $this->persistTransactions($rows, $profileName);
     }
 
     /**
@@ -161,8 +164,10 @@ final class ImportController
      * @param  array<int, array<string, mixed>> $rows
      * @return array{imported: int, skipped: int, month_year_groups: array<string, int>}
      */
-    private function persistTransactions(array $rows): array
+    private function persistTransactions(array $rows, string $profileName = ''): array
     {
+        $rows = $this->applyInternalTransferRules($rows, $profileName);
+
         // INSERT OR IGNORE descarta silenciosamente duplicados via:
         //   - external_id UNIQUE (MercadoPago)
         //   - idx_uniq_transaction (date+origin+operation+raw_description+amount)
@@ -227,6 +232,21 @@ final class ImportController
             'skipped'           => $skipped,
             'month_year_groups' => $monthYearGroups,
         ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function applyInternalTransferRules(array $rows, string $profileName): array
+    {
+        if (trim($profileName) === '') {
+            return $rows;
+        }
+
+        $service = $this->internalTransfers ?? new InternalTransferService($this->pdo);
+
+        return $service->applyToRows($rows, $profileName);
     }
 
     /**

@@ -15,6 +15,7 @@ class ComposerStaticInit11d64eecaaea666e0eb486befa5e1f0f
         'f8f2ab2dedaeccc61ef03f614b6fc463' => __DIR__ . '/../..' . '/src/controllers/NubankParser.php',
         '92b7646f35be4e592751c9aafe0f56a9' => __DIR__ . '/../..' . '/src/controllers/MercadoPagoParser.php',
         '5b059aa824cd68e3c480590f31926a6e' => __DIR__ . '/../..' . '/src/controllers/ImportController.php',
+        '3a0f78dc2095dfd7c2d0214e3709d7a9' => __DIR__ . '/../..' . '/src/controllers/InternalTransferService.php',
         '378f4184b9d6eac682a97bcd057c6dd1' => __DIR__ . '/../..' . '/src/controllers/ReimbursementController.php',
         'c3f1f0f6127bf2211979a40bbf2fd122' => __DIR__ . '/../..' . '/src/controllers/ClosureController.php',
         '84a7e12bf2546d8dc82d9d71864b91e7' => __DIR__ . '/../..' . '/src/controllers/ChartController.php',

@@ -64,8 +64,9 @@ try {
         ], 422);
     }
 
-    $text = (string) $body['text'];
-    $year = isset($body['year']) ? (int) $body['year'] : 0;
+    $text        = (string) $body['text'];
+    $year        = isset($body['year']) ? (int) $body['year'] : 0;
+    $profileName = trim((string) ($body['profile_name'] ?? ''));
 
     $pdo        = Database::getConnection();
     $ruleEngine = new RuleEngine($pdo);
@@ -84,7 +85,7 @@ try {
 
     // Persistir usando o mesmo método do ImportController
     $controller = new ImportController($pdo, $ruleEngine);
-    $result     = $controller->persistFromRows($rows);
+    $result     = $controller->persistFromRows($rows, $profileName);
 
     jsonResponse([
         'success'           => true,

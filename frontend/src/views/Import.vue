@@ -1,7 +1,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { importApi } from '@/services/api.js'
+import { useProfile } from '@/composables/useProfile.js'
 import { fmtMonthYear } from '@/utils/dates.js'
+
+const { profileName } = useProfile()
 
 const mode = ref('file')
 
@@ -54,11 +57,15 @@ async function submit() {
 
   try {
     if (mode.value === 'file') {
-      const { data } = await importApi.upload(selectedFile.value)
+      const { data } = await importApi.upload(selectedFile.value, profileName.value)
       result.value = data
       if (data.success) prepareForNextImport()
     } else {
-      const { data } = await importApi.importText(pasteText.value.trim(), pasteYear.value)
+      const { data } = await importApi.importText(
+        pasteText.value.trim(),
+        pasteYear.value,
+        profileName.value,
+      )
       result.value = data
       if (data.success) prepareForNextImport()
     }
@@ -87,7 +94,15 @@ function reset() {
     <header class="page-header">
       <div>
         <h2 class="page-title">Importar Extrato</h2>
-        <p class="page-subtitle">Envie um ficheiro ou cole o texto da fatura Nubank</p>
+        <p class="page-subtitle">
+          Envie um ficheiro ou cole o texto da fatura Nubank.
+          <span v-if="profileName" class="page-subtitle__hint">
+            Pix com «{{ profileName }}» na descrição serão marcados como movimentação interna.
+          </span>
+          <span v-else class="page-subtitle__hint">
+            Defina o seu nome no menu lateral para ignorar Pix entre contas suas.
+          </span>
+        </p>
       </div>
     </header>
 
@@ -151,7 +166,8 @@ function reset() {
             </li>
             <li>
               Clique em <strong>Importar</strong>. As transações são categorizadas pelas regras
-              definidas no sistema.
+              do sistema; descrições com o seu nome (menu lateral) viram
+              <strong>Movimentação interna</strong> e não entram em receitas nem despesas.
             </li>
             <li>
               Duplicados são ignorados — pode reimportar o mesmo ficheiro sem criar lançamentos
@@ -613,6 +629,13 @@ function reset() {
 }
 
 /* Abas do painel de importação: ícone acompanha o texto (accent no hover/ativo) */
+.page-subtitle__hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
 .panel--import .tab:hover {
   color: var(--color-accent);
 }

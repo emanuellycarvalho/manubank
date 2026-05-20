@@ -96,6 +96,30 @@ final class ChartControllerTest extends TestCase
         $this->assertEqualsWithDelta(1000.00, $result['series'][0]['total_income'], 0.01);
     }
 
+    public function testInternalTransferCategoryExcludedFromTotals(): void
+    {
+        $this->pdo->exec(
+            "INSERT INTO categories (name, type, color) VALUES ('Movimentação interna', 'Neutro', '#8A8F9E')"
+        );
+        $internalId = (int) $this->pdo->lastInsertId();
+        $geralId    = (int) $this->pdo->query('SELECT id FROM categories WHERE name = \'Geral\'')->fetchColumn();
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO transactions
+                (category_id, type, date, origin, operation, amount, raw_description, month_year)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$internalId, 'entrada', '2026-04-01', 'Test', 'Pix', 3000.00, 'self', '2026-04']);
+        $stmt->execute([$internalId, 'saída', '2026-04-02', 'Test', 'Pix', 3000.00, 'self', '2026-04']);
+        $stmt->execute([$geralId, 'entrada', '2026-04-03', 'Test', 'op', 100.00, 'salary', '2026-04']);
+
+        $result = $this->controller->getAggregatedSeries('2026-04-01', '2026-04-30', 'month');
+
+        $this->assertCount(1, $result['series']);
+        $this->assertEqualsWithDelta(100.00, $result['series'][0]['total_income'], 0.01);
+        $this->assertEqualsWithDelta(0.00, $result['series'][0]['total_expenses'], 0.01);
+    }
+
     public function testSeriesOrderedChronologically(): void
     {
         $result = $this->controller->getAggregatedSeries('2026-01-01', '2026-03-31', 'month');
