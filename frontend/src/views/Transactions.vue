@@ -26,6 +26,7 @@ const TX_SORT_COLS = [
 ]
 
 const TX_HEADERS = [
+  { key: 'select',      label: '',          sortable: false },
   { key: 'date',        label: 'Data',      sortable: true },
   { key: 'origin',      label: 'Origem',    sortable: true },
   { key: 'operation',   label: 'Operação',  sortable: true },
@@ -70,8 +71,11 @@ function periodLabel(monthYear) {
 // Modal state — only one open at a time
 const activeModal      = ref(null)  // 'rule' | 'claim' | 'payment'
 const selectedTx       = ref(null)
-const txToDelete       = ref(null)
+/** @type {import('vue').Ref<{ ids: number[], detail?: string } | null>} */
+const deleteConfirm    = ref(null)
 const isDeleting       = ref(false)
+const selectedIds      = ref(new Set())
+const selectAllRef     = ref(null)
 
 // Toast
 const toast = ref(null)  // { message, type }
@@ -199,12 +203,49 @@ const rangeEnd = computed(() => {
 
 const showPageNav = computed(() => pageSize.value !== 'all' && totalPages.value > 1)
 
+const selectableIds = computed(() => sortedTransactions.value.map((t) => t.id))
+
+const selectedCount = computed(() => selectedIds.value.size)
+
+const allFilteredSelected = computed(() => {
+  const ids = selectableIds.value
+  return ids.length > 0 && ids.every((id) => selectedIds.value.has(id))
+})
+
+const someFilteredSelected = computed(() =>
+  selectableIds.value.some((id) => selectedIds.value.has(id)),
+)
+
+const selectionIndeterminate = computed(
+  () => someFilteredSelected.value && !allFilteredSelected.value,
+)
+
 function goToPage(page) {
   currentPage.value = Math.max(1, Math.min(page, totalPages.value))
 }
 
 watch([searchQuery, selectedMonth, pageSize], () => {
   currentPage.value = 1
+})
+
+watch(selectedMonth, () => {
+  selectedIds.value = new Set()
+})
+
+watch(
+  [selectionIndeterminate, allFilteredSelected, () => sortedTransactions.value.length],
+  ([indeterminate]) => {
+    if (selectAllRef.value) selectAllRef.value.indeterminate = indeterminate
+  },
+  { flush: 'post' },
+)
+
+watch(transactions, () => {
+  const valid = new Set(transactions.value.map((t) => t.id))
+  const pruned = [...selectedIds.value].filter((id) => valid.has(id))
+  if (pruned.length !== selectedIds.value.size) {
+    selectedIds.value = new Set(pruned)
+  }
 })
 
 watch(totalPages, (tp) => {
@@ -259,7 +300,7 @@ async function changeCategory(tx, newCategoryId) {
 // ── Resizable columns ──────────────────────────────────────────────────────
 const COL_WIDTHS_KEY = 'finance_col_widths'
 
-const DEFAULT_WIDTHS = [90, 120, 130, 260, 180, 140, 210]
+const DEFAULT_WIDTHS = [44, 90, 120, 130, 260, 180, 140, 210]
 
 function loadWidths() {
   try {
@@ -336,13 +377,49 @@ async function onPaymentRegistered() {
   closeModal()
 }
 
+function isSelected(id) {
+  return selectedIds.value.has(id)
+}
+
+function toggleSelect(id) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function toggleSelectAll() {
+  if (allFilteredSelected.value) {
+    selectedIds.value = new Set()
+    return
+  }
+  selectedIds.value = new Set(selectableIds.value)
+}
+
+function clearSelection() {
+  selectedIds.value = new Set()
+}
+
 function requestDelete(tx) {
-  txToDelete.value = tx
+  deleteConfirm.value = {
+    ids: [tx.id],
+    detail: tx.translated_description || tx.raw_description,
+  }
+}
+
+function requestBulkDelete() {
+  if (!selectedCount.value) return
+  deleteConfirm.value = { ids: [...selectedIds.value] }
 }
 
 function cancelDelete() {
-  if (!isDeleting.value) txToDelete.value = null
+  if (!isDeleting.value) deleteConfirm.value = null
 }
+
+const deleteConfirmTitle = computed(() => {
+  const n = deleteConfirm.value?.ids.length ?? 0
+  return n <= 1 ? 'Excluir transação?' : `Excluir ${n} transações?`
+})
 
 async function onManualTransactionSaved(tx) {
   showManualModal.value = false
@@ -358,14 +435,26 @@ async function onManualTransactionSaved(tx) {
 }
 
 async function confirmDelete() {
-  if (!txToDelete.value) return
+  const ids = deleteConfirm.value?.ids
+  if (!ids?.length) return
+
   isDeleting.value = true
-  const id = txToDelete.value.id
+  const idSet = new Set(ids)
+
   try {
-    await transactionsApi.remove(id)
-    transactions.value = transactions.value.filter(t => t.id !== id)
-    txToDelete.value = null
-    showToast('Transação excluída.')
+    const results = await Promise.allSettled(ids.map((id) => transactionsApi.remove(id)))
+    const failed = results.filter((r) => r.status === 'rejected').length
+    const ok = ids.length - failed
+
+    transactions.value = transactions.value.filter((t) => !idSet.has(t.id))
+    selectedIds.value = new Set([...selectedIds.value].filter((id) => !idSet.has(id)))
+    deleteConfirm.value = null
+
+    if (failed) {
+      showToast(`${ok} excluída(s), ${failed} falharam.`, 'error')
+    } else {
+      showToast(ok === 1 ? 'Transação excluída.' : `${ok} transações excluídas.`)
+    }
   } catch (err) {
     showToast('Erro ao excluir: ' + err.message, 'error')
   } finally {
@@ -477,6 +566,22 @@ async function confirmDelete() {
         <p v-if="hasSearchFilter" class="search-hint">
           {{ sortedTransactions.length }} de {{ transactions.length }} transações
         </p>
+        <div v-if="selectedCount" class="selection-bar">
+          <span class="selection-bar__count">
+            {{ selectedCount }} selecionada{{ selectedCount === 1 ? '' : 's' }}
+          </span>
+          <button type="button" class="btn btn--outline btn--sm" @click="clearSelection">
+            Limpar seleção
+          </button>
+          <button
+            type="button"
+            class="btn btn--danger btn--sm"
+            @click="requestBulkDelete"
+          >
+            <unicon name="trash-alt" width="14" height="14" />
+            Excluir selecionadas
+          </button>
+        </div>
         <button type="button" class="btn btn--primary" @click="showManualModal = true">
           <unicon name="plus" width="16" height="16" />
           Nova transação
@@ -505,13 +610,25 @@ async function confirmDelete() {
               :class="[
                 col.sortable && 'th-sortable',
                 col.sortable && sortClass(col.key),
+                col.key === 'select' && 'col-select',
                 col.key === 'actions' && 'col-actions',
               ]"
               @click="col.sortable && toggleSort(col.key)"
             >
-              {{ col.label }}
+              <label v-if="col.key === 'select'" class="select-all-label" @click.stop>
+                <input
+                  ref="selectAllRef"
+                  type="checkbox"
+                  class="tx-checkbox"
+                  :checked="allFilteredSelected"
+                  :disabled="!selectableIds.length"
+                  aria-label="Selecionar todas as transações visíveis"
+                  @change="toggleSelectAll"
+                />
+              </label>
+              <template v-else>{{ col.label }}</template>
               <div
-                v-if="i < 6"
+                v-if="col.key !== 'select' && col.key !== 'actions'"
                 class="resize-handle"
                 @mousedown.stop="startResize(i, $event)"
               ></div>
@@ -522,8 +639,17 @@ async function confirmDelete() {
           <tr
             v-for="tx in paginatedTransactions"
             :key="tx.id"
-            :class="rowClass(tx.type)"
+            :class="[rowClass(tx.type), isSelected(tx.id) && 'row--selected']"
           >
+            <td class="col-select">
+              <input
+                type="checkbox"
+                class="tx-checkbox"
+                :checked="isSelected(tx.id)"
+                :aria-label="`Selecionar ${formatTxDescription(tx)}`"
+                @change="toggleSelect(tx.id)"
+              />
+            </td>
             <td class="col-date">{{ fmtDate(tx.date) }}</td>
             <td class="td-clip">{{ tx.origin }}</td>
             <td class="td-clip">{{ tx.operation }}</td>
@@ -587,15 +713,24 @@ async function confirmDelete() {
                 Excluir
               </button>
 
-              <button
+              <span
                 v-if="tx.category_name === 'Outros'"
-                class="btn-action btn-action--rule"
-                title="Criar regra de parsing"
-                @click="openRuleModal(tx)"
+                class="action-tooltip"
               >
-                <unicon name="tag-alt" width="14" height="14" />
-                Regra
-              </button>
+                <button
+                  type="button"
+                  class="btn-action btn-action--rule"
+                  aria-label="Criar regra de categorização"
+                  @click="openRuleModal(tx)"
+                >
+                  <unicon name="tag-alt" width="14" height="14" />
+                  Regra
+                </button>
+                <span class="action-tooltip__bubble" role="tooltip">
+                  Cria uma regra a partir desta linha: descrições parecidas nas próximas importações
+                  passam a ser categorizadas automaticamente. Pode atualizar transações já importadas.
+                </span>
+              </span>
             </td>
           </tr>
         </tbody>
@@ -685,10 +820,10 @@ async function confirmDelete() {
     />
 
     <ConfirmModal
-      v-if="txToDelete"
-      title="Excluir transação?"
+      v-if="deleteConfirm"
+      :title="deleteConfirmTitle"
       message="Esta ação não pode ser desfeita."
-      :detail="txToDelete.translated_description || txToDelete.raw_description"
+      :detail="deleteConfirm.detail"
       confirm-label="Excluir"
       cancel-label="Cancelar"
       :loading="isDeleting"
@@ -751,6 +886,91 @@ async function confirmDelete() {
 .table-toolbar .btn--primary {
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: rgba(197, 119, 0, 0.12);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+.selection-bar__count {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.btn--outline {
+  background: transparent;
+  border: 1px solid var(--color-border-light);
+  color: var(--color-text-muted);
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn--outline:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.btn--danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-error);
+  color: #e7e7e7;
+  border: none;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn--danger:hover { filter: brightness(1.1); }
+
+.btn--sm { padding: 6px 12px; font-size: 0.8rem; }
+
+.col-select {
+  width: 44px;
+  text-align: center;
+  padding-left: 10px;
+  padding-right: 10px;
+  overflow: visible;
+}
+
+.select-all-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  cursor: pointer;
+}
+
+.tx-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.row--selected {
+  background: rgba(197, 119, 0, 0.1) !important;
+}
+
+.row--selected:hover {
+  background: rgba(197, 119, 0, 0.16) !important;
 }
 
 .search-field {
@@ -1027,6 +1247,52 @@ async function confirmDelete() {
 .btn-action:hover { filter: brightness(.9); }
 
 .btn-action--rule    { background: var(--color-info); color: #e7e7e7; }
+
+.action-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.action-tooltip__bubble {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-light);
+  box-shadow: var(--shadow-md);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--color-text);
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.action-tooltip__bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--color-border-light);
+}
+
+.action-tooltip:hover .action-tooltip__bubble,
+.action-tooltip:focus-within .action-tooltip__bubble {
+  opacity: 1;
+  visibility: visible;
+}
 .btn-action--claim   { background: var(--color-accent);}
 .btn-action--payment { background: var(--color-success); color: #e7e7e7; }
 .btn-action--delete  { background: var(--color-error); color: #e7e7e7; }
