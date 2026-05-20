@@ -31,6 +31,19 @@ final class AllocationControllerTest extends TestCase
         SQL);
 
         $this->pdo->exec(<<<'SQL'
+            CREATE TABLE investment_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                objective_id INTEGER NOT NULL,
+                type TEXT NOT NULL CHECK (type IN ('entrada', 'saída')),
+                amount REAL NOT NULL,
+                date TEXT NOT NULL,
+                description TEXT,
+                FOREIGN KEY (objective_id) REFERENCES investment_objectives (id)
+                    ON DELETE CASCADE
+            )
+        SQL);
+
+        $this->pdo->exec(<<<'SQL'
             CREATE TABLE investment_allocations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 objective_id INTEGER,
@@ -106,5 +119,64 @@ final class AllocationControllerTest extends TestCase
             'amount'   => 100,
             'priority' => 6,
         ]);
+    }
+
+    public function testCreateWithObjectiveRegistersInitialEntry(): void
+    {
+        $this->controller->create([
+            'objective_id' => 1,
+            'bank'         => 'Picpay',
+            'amount'       => 3000,
+        ]);
+
+        $entries = $this->pdo->query('SELECT * FROM investment_entries')->fetchAll();
+        $this->assertCount(1, $entries);
+        $this->assertSame('entrada', $entries[0]['type']);
+        $this->assertEqualsWithDelta(3000.0, (float) $entries[0]['amount'], 0.01);
+        $this->assertStringContainsString('Saldo inicial consolidado', (string) $entries[0]['description']);
+    }
+
+    public function testUpdateAmountCreatesDeltaEntryInObjective(): void
+    {
+        $row = $this->controller->create([
+            'objective_id' => 1,
+            'bank'         => 'BMG',
+            'amount'       => 1000,
+        ]);
+
+        $this->controller->update($row['id'], [
+            'objective_id' => 1,
+            'bank'         => 'BMG',
+            'amount'       => 1500,
+        ]);
+
+        $entries = $this->pdo->query(
+            'SELECT type, amount, description FROM investment_entries ORDER BY id ASC'
+        )->fetchAll();
+
+        $this->assertCount(2, $entries);
+        $this->assertSame('entrada', $entries[1]['type']);
+        $this->assertEqualsWithDelta(500.0, (float) $entries[1]['amount'], 0.01);
+        $this->assertStringContainsString('Ajuste consolidado', (string) $entries[1]['description']);
+    }
+
+    public function testValorAcumuladoEqualsAllocationSum(): void
+    {
+        $this->controller->create([
+            'objective_id' => 1,
+            'bank'         => 'Nubank',
+            'amount'       => 2000,
+        ]);
+        $this->controller->create([
+            'objective_id' => 1,
+            'bank'         => 'XP',
+            'amount'       => 1000,
+        ]);
+
+        $investment = new \InvestmentController($this->pdo);
+        $objectives = $investment->getObjectivesWithMetrics();
+
+        $this->assertCount(1, $objectives);
+        $this->assertEqualsWithDelta(3000.0, $objectives[0]['valor_acumulado'], 0.01);
     }
 }

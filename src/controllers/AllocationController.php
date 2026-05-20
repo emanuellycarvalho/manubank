@@ -7,9 +7,17 @@ declare(strict_types=1);
  */
 final class AllocationController
 {
+    private const AMOUNT_EPSILON = 0.005;
+
     public function __construct(
         private readonly PDO $pdo,
+        private readonly ?InvestmentController $investmentController = null,
     ) {
+    }
+
+    private function investments(): InvestmentController
+    {
+        return $this->investmentController ?? new InvestmentController($this->pdo);
     }
 
     /**
@@ -84,18 +92,42 @@ final class AllocationController
     {
         $data = $this->validatePayload($payload);
 
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO investment_allocations (
-                objective_id, bank, type, liquidity, amount, priority,
-                cdi_percentage, monthly_rate, yearly_rate, description
-             ) VALUES (
-                :objective_id, :bank, :type, :liquidity, :amount, :priority,
-                :cdi_percentage, :monthly_rate, :yearly_rate, :description
-             )'
-        );
-        $stmt->execute($data);
+        $this->pdo->beginTransaction();
 
-        return $this->getById((int) $this->pdo->lastInsertId());
+        try {
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO investment_allocations (
+                    objective_id, bank, type, liquidity, amount, priority,
+                    cdi_percentage, monthly_rate, yearly_rate, description
+                 ) VALUES (
+                    :objective_id, :bank, :type, :liquidity, :amount, :priority,
+                    :cdi_percentage, :monthly_rate, :yearly_rate, :description
+                 )'
+            );
+            $stmt->execute($data);
+
+            $id = (int) $this->pdo->lastInsertId();
+
+            if ($data[':objective_id'] !== null) {
+                $this->recordConsolidatedEntry(
+                    (int) $data[':objective_id'],
+                    'entrada',
+                    (float) $data[':amount'],
+                    (string) $data[':bank'],
+                    'Saldo inicial consolidado',
+                );
+            }
+
+            $this->pdo->commit();
+
+            return $this->getById($id);
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        }
     }
 
     /**
@@ -105,36 +137,154 @@ final class AllocationController
      */
     public function update(int $id, array $payload): array
     {
-        $this->getById($id);
+        $before = $this->getById($id);
         $data = $this->validatePayload($payload);
 
-        $stmt = $this->pdo->prepare(
-            'UPDATE investment_allocations SET
-                objective_id = :objective_id,
-                bank = :bank,
-                type = :type,
-                liquidity = :liquidity,
-                amount = :amount,
-                priority = :priority,
-                cdi_percentage = :cdi_percentage,
-                monthly_rate = :monthly_rate,
-                yearly_rate = :yearly_rate,
-                description = :description
-             WHERE id = :id'
-        );
-        $stmt->execute([...$data, ':id' => $id]);
+        $this->pdo->beginTransaction();
 
-        return $this->getById($id);
+        try {
+            $stmt = $this->pdo->prepare(
+                'UPDATE investment_allocations SET
+                    objective_id = :objective_id,
+                    bank = :bank,
+                    type = :type,
+                    liquidity = :liquidity,
+                    amount = :amount,
+                    priority = :priority,
+                    cdi_percentage = :cdi_percentage,
+                    monthly_rate = :monthly_rate,
+                    yearly_rate = :yearly_rate,
+                    description = :description
+                 WHERE id = :id'
+            );
+            $stmt->execute([...$data, ':id' => $id]);
+
+            $this->syncObjectiveEntriesAfterAllocationChange($before, $data);
+
+            $this->pdo->commit();
+
+            return $this->getById($id);
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        }
     }
 
     public function delete(int $id): void
     {
-        $stmt = $this->pdo->prepare('DELETE FROM investment_allocations WHERE id = :id');
-        $stmt->execute([':id' => $id]);
+        $before = $this->getById($id);
 
-        if ($stmt->rowCount() === 0) {
-            throw new \InvalidArgumentException("Alocação #{$id} não encontrada.");
+        $this->pdo->beginTransaction();
+
+        try {
+            $stmt = $this->pdo->prepare('DELETE FROM investment_allocations WHERE id = :id');
+            $stmt->execute([':id' => $id]);
+
+            if ($stmt->rowCount() === 0) {
+                throw new \InvalidArgumentException("Alocação #{$id} não encontrada.");
+            }
+
+            if ($before['objective_id'] !== null) {
+                $this->recordConsolidatedEntry(
+                    $before['objective_id'],
+                    'saída',
+                    $before['amount'],
+                    $before['bank'],
+                    'Remoção consolidado',
+                );
+            }
+
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
         }
+    }
+
+    /**
+     * Lançamento automático no objetivo quando o consolidado muda (unilateral).
+     *
+     * @param array<string, mixed> $validatedRow Dados de validatePayload()
+     */
+    private function syncObjectiveEntriesAfterAllocationChange(array $before, array $validatedRow): void
+    {
+        $beforeObjectiveId = $before['objective_id'];
+        $afterObjectiveId = $validatedRow[':objective_id'];
+        $beforeAmount = (float) $before['amount'];
+        $afterAmount = (float) $validatedRow[':amount'];
+        $bank = (string) $validatedRow[':bank'];
+
+        if ($beforeObjectiveId === $afterObjectiveId && $beforeObjectiveId !== null) {
+            $this->recordAmountDelta(
+                $beforeObjectiveId,
+                $beforeAmount,
+                $afterAmount,
+                $bank,
+            );
+
+            return;
+        }
+
+        if ($beforeObjectiveId !== null) {
+            $this->recordConsolidatedEntry(
+                $beforeObjectiveId,
+                'saída',
+                $beforeAmount,
+                (string) $before['bank'],
+                'Transferência consolidado',
+            );
+        }
+
+        if ($afterObjectiveId !== null) {
+            $this->recordConsolidatedEntry(
+                (int) $afterObjectiveId,
+                'entrada',
+                $afterAmount,
+                $bank,
+                $beforeObjectiveId === null ? 'Saldo inicial consolidado' : 'Transferência consolidado',
+            );
+        }
+    }
+
+    private function recordAmountDelta(int $objectiveId, float $beforeAmount, float $afterAmount, string $bank): void
+    {
+        $delta = round($afterAmount - $beforeAmount, 2);
+
+        if (abs($delta) < self::AMOUNT_EPSILON) {
+            return;
+        }
+
+        $this->recordConsolidatedEntry(
+            $objectiveId,
+            $delta > 0 ? 'entrada' : 'saída',
+            abs($delta),
+            $bank,
+            'Ajuste consolidado',
+        );
+    }
+
+    private function recordConsolidatedEntry(
+        int $objectiveId,
+        string $type,
+        float $amount,
+        string $bank,
+        string $reason,
+    ): void {
+        if ($amount <= 0.0) {
+            return;
+        }
+
+        $bankLabel = trim($bank) !== '' ? trim($bank) : 'Conta';
+        $description = sprintf('%s (%s)', $reason, $bankLabel);
+        $today = (new \DateTimeImmutable('today'))->format('Y-m-d');
+
+        $this->investments()->addEntry($objectiveId, $type, $amount, $today, $description);
     }
 
     /**

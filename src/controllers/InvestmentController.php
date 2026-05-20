@@ -287,19 +287,13 @@ final class InvestmentController
             }
         }
 
+        $allocationTotals = $this->fetchAllocationTotalsByObjective();
         $today = $this->today();
         $result = [];
 
         foreach ($grouped as $objective) {
-            $valorAcumulado = 0.0;
-
-            foreach ($objective['entries'] as $entry) {
-                if ($entry['type'] === 'entrada') {
-                    $valorAcumulado += $entry['amount'];
-                } else {
-                    $valorAcumulado -= $entry['amount'];
-                }
-            }
+            // Valor acumulado = soma das contas no consolidado (fonte de verdade unilateral).
+            $valorAcumulado = $allocationTotals[$objective['id']] ?? 0.0;
 
             $targetAmount = $objective['target_amount'];
             $porcentagemAlcancada = $targetAmount > 0.0
@@ -354,6 +348,32 @@ final class InvestmentController
         return $this->parseDate($earliest);
     }
 
+    /**
+     * @return array<int, float> objective_id => soma amount das alocações
+     */
+    private function fetchAllocationTotalsByObjective(): array
+    {
+        try {
+            $stmt = $this->pdo->query(
+                'SELECT objective_id, COALESCE(SUM(amount), 0) AS total
+                 FROM investment_allocations
+                 WHERE objective_id IS NOT NULL
+                 GROUP BY objective_id'
+            );
+        } catch (\PDOException $e) {
+            // Tabela pode não existir em bases legadas de testes.
+            return [];
+        }
+
+        $totals = [];
+
+        foreach ($stmt->fetchAll() as $row) {
+            $totals[(int) $row['objective_id']] = round((float) $row['total'], 2);
+        }
+
+        return $totals;
+    }
+
     private function objectiveExists(int $objectiveId): bool
     {
         $stmt = $this->pdo->prepare('SELECT id FROM investment_objectives WHERE id = :id LIMIT 1');
@@ -369,6 +389,11 @@ final class InvestmentController
      */
     private function parseDate(string $value): DateTime
     {
+        $value = trim($value);
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $value, $matches) === 1) {
+            $value = $matches[1];
+        }
+
         $date = DateTime::createFromFormat('Y-m-d', $value);
 
         if ($date === false) {

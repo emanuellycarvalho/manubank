@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { investmentsApi } from '@/services/api.js'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import InvestmentAllocations from '@/components/InvestmentAllocations.vue'
+import InvestmentEntryModal from '@/components/InvestmentEntryModal.vue'
 import YieldGrowthChart from '@/components/charts/YieldGrowthChart.vue'
 import { useTableSort } from '@/composables/useTableSort.js'
 import { toIsoDate, defaultDashboardDateRange } from '@/utils/dates.js'
@@ -67,8 +68,8 @@ const EMPTY_ENTRY = () => ({
   amount: '',
   description: '',
 })
-const entryForm = reactive(EMPTY_ENTRY())
 const entryEditForm = reactive(EMPTY_ENTRY())
+const showEntryModal = ref(false)
 
 const brl = (v) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0)
@@ -388,40 +389,9 @@ async function confirmDeleteObjective() {
   }
 }
 
-async function submitEntry() {
-  const objective = activeObjective.value
-  if (!objective) return
-
-  const amount = parsePositiveAmount(entryForm.amount)
-  if (!entryForm.date) {
-    errorMsg.value = 'Informe a data do lançamento.'
-    return
-  }
-  if (!amount) {
-    errorMsg.value = 'Informe um valor positivo.'
-    return
-  }
-
-  isSubmitting.value = true
-  errorMsg.value = ''
-
-  try {
-    await investmentsApi.addEntry({
-      objective_id: objective.id,
-      type: entryForm.type,
-      amount,
-      date: entryForm.date,
-      description: entryForm.description.trim(),
-    })
-
-    Object.assign(entryForm, EMPTY_ENTRY())
-    showSuccess('Lançamento registado com sucesso.')
-    await loadObjectives()
-  } catch (err) {
-    errorMsg.value = err.message
-  } finally {
-    isSubmitting.value = false
-  }
+async function onEntryModalSuccess() {
+  showSuccess('Lançamento registado com sucesso.')
+  await loadObjectives()
 }
 
 async function submitEditEntry() {
@@ -571,7 +541,7 @@ onMounted(async () => {
             :aria-selected="isAllocationsTab"
             @click="selectTab(ALLOCATIONS_TAB)"
           >
-            <unicon name="chart-pie" width="16" height="16" />
+            <unicon name="dollar-sign" width="16" height="16" />
             Consolidado
           </button>
           <button
@@ -601,6 +571,7 @@ onMounted(async () => {
       <InvestmentAllocations
         v-if="isAllocationsTab"
         :objectives="objectives"
+        @refresh-objectives="loadObjectives"
       />
 
       <div v-else-if="objectives.length === 0" class="empty-state card">
@@ -679,7 +650,17 @@ onMounted(async () => {
         <div class="investments-main">
           <!-- Histórico (50%) -->
           <section class="card history-card investments-main__history">
-            <h3 class="section-title">Histórico</h3>
+            <header class="history-card__header">
+              <h3 class="section-title">Histórico</h3>
+              <button
+                type="button"
+                class="btn btn--primary btn--sm"
+                @click="showEntryModal = true"
+              >
+                <unicon name="plus" width="16" height="16" />
+                Novo lançamento
+              </button>
+            </header>
             <div class="table-wrap">
               <table class="table table--investments">
                 <thead>
@@ -746,63 +727,6 @@ onMounted(async () => {
           </section>
 
           <div class="investments-main__aside">
-            <!-- Formulário (50%) -->
-            <section class="card entry-form-card">
-              <h3 class="section-title">Novo lançamento</h3>
-              <form class="entry-form" @submit.prevent="submitEntry" novalidate>
-                <div class="entry-form__grid">
-                  <div class="form-group entry-form__field">
-                    <label class="form-label" for="entry-date">Data</label>
-                    <input
-                      id="entry-date"
-                      v-model="entryForm.date"
-                      type="date"
-                      class="form-control"
-                      required
-                    />
-                  </div>
-                  <div class="form-group entry-form__field">
-                    <label class="form-label" for="entry-type">Tipo</label>
-                    <select id="entry-type" v-model="entryForm.type" class="form-control app-select">
-                      <option value="entrada">Entrada</option>
-                      <option value="saída">Saída</option>
-                    </select>
-                  </div>
-                  <div class="form-group entry-form__field entry-form__field--full">
-                    <label class="form-label" for="entry-amount">Valor (R$)</label>
-                    <input
-                      id="entry-amount"
-                      v-model="entryForm.amount"
-                      type="number"
-                      class="form-control"
-                      min="0.01"
-                      step="0.01"
-                      placeholder="0,00"
-                      required
-                    />
-                  </div>
-                  <div class="form-group entry-form__field entry-form__field--full">
-                    <label class="form-label" for="entry-desc">Descrição</label>
-                    <input
-                      id="entry-desc"
-                      v-model.trim="entryForm.description"
-                      type="text"
-                      class="form-control"
-                      placeholder="Opcional"
-                      maxlength="200"
-                    />
-                  </div>
-                </div>
-                <div class="entry-form__actions">
-                  <button type="submit" class="btn btn--primary btn--block" :disabled="isSubmitting">
-                    <span v-if="isSubmitting" class="spinner-ui spinner-ui--sm" aria-hidden="true"></span>
-                    {{ isSubmitting ? 'Salvando…' : 'Registrar lançamento' }}
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            <!-- Rendimentos (abaixo do formulário) -->
             <section class="card yield-chart-card" aria-label="Evolução de rendimentos">
               <h3 class="section-title">Rendimentos por mês</h3>
               <p class="yield-chart-card__desc">
@@ -991,6 +915,14 @@ onMounted(async () => {
         </div>
       </div>
     </Transition>
+
+    <InvestmentEntryModal
+      :open="showEntryModal && !!activeObjective"
+      :objective-id="activeObjective?.id ?? null"
+      :objective-name="activeObjective?.name ?? ''"
+      @close="showEntryModal = false"
+      @success="onEntryModalSuccess"
+    />
 
     <ConfirmModal
       v-if="entryToDelete"
@@ -1422,13 +1354,23 @@ onMounted(async () => {
   padding: 16px 18px 0;
 }
 
-.entry-form-card,
 .history-card {
   margin-bottom: 0;
+  min-width: 0;
 }
 
-.history-card {
-  min-width: 0;
+.history-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 18px 0;
+}
+
+.history-card__header .section-title {
+  margin: 0;
+  padding: 0;
 }
 
 .history-card .table-wrap {
@@ -1439,56 +1381,8 @@ onMounted(async () => {
   width: 100%;
 }
 
-.entry-form {
-  padding: 0 18px 18px;
-}
-
-.entry-form__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.entry-form__field--full {
-  grid-column: 1 / -1;
-}
-
-@media (max-width: 480px) {
-  .entry-form__grid {
-    grid-template-columns: 1fr;
-  }
-
-  .entry-form__field--full {
-    grid-column: auto;
-  }
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-label {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.entry-form__actions {
-  margin-top: 14px;
-}
-
-.entry-form-card .section-title {
-  padding-bottom: 0;
-}
-
 .table-wrap {
   overflow-x: auto;
-}
-
-.history-card .section-title {
-  padding-bottom: 0;
 }
 
 .table-empty {

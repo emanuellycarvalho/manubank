@@ -2,6 +2,8 @@
 import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
 import { allocationsApi, cdiApi } from '@/services/api.js'
 import ConfirmModal from '@/components/ConfirmModal.vue'
+import InvestmentEntryModal from '@/components/InvestmentEntryModal.vue'
+import { useTableSort } from '@/composables/useTableSort.js'
 import {
   rateToPercent,
   percentToRate,
@@ -15,6 +17,8 @@ import {
 const props = defineProps({
   objectives: { type: Array, default: () => [] },
 })
+
+const emit = defineEmits(['refresh-objectives'])
 
 const STAR_EMPTY = 'rgba(72, 86, 150, 0.45)'
 const STAR_FILLED = '#c57700'
@@ -30,8 +34,32 @@ const cdiLoading = ref(false)
 const cdiError = ref('')
 
 const showFormModal = ref(false)
+const showEntryModal = ref(false)
+const entryModalObjectiveId = ref(null)
+const entryModalObjectiveName = ref('')
+const entryModalContextLabel = ref('')
+
+const showAmountModal = ref(false)
+const amountEditRow = ref(null)
+const amountEditValue = ref('')
+const isAmountSaving = ref(false)
+
 const editingId = ref(null)
 const itemToDelete = ref(null)
+
+const ENTRY_MODAL_DEFAULTS = { type: 'entrada', description: 'Rendimentos' }
+
+const ALLOC_SORT_COLS = [
+  { key: 'priority', getValue: (r) => priorityLevel(r) || 99 },
+  { key: 'bank', getValue: (r) => r.bank ?? '' },
+  { key: 'objective', getValue: (r) => r.objective_name ?? '' },
+  { key: 'type', getValue: (r) => r.type ?? '' },
+  { key: 'liquidity', getValue: (r) => r.liquidity ?? '' },
+  { key: 'amount', getValue: (r) => r.amount },
+  { key: 'cdi_percentage', getValue: (r) => r.cdi_percentage ?? -1 },
+  { key: 'yearly_rate', getValue: (r) => r.yearly_rate ?? -1 },
+  { key: 'monthly_yield', getValue: (r) => projectedMonthlyYield(r) },
+]
 
 /** Evita loops entre watchers de taxas. */
 let rateSyncLock = false
@@ -68,6 +96,11 @@ const totalInvested = computed(() =>
   allocations.value.reduce((s, row) => s + (Number(row.amount) || 0), 0),
 )
 
+/** Soma das previsões mensais (amount × taxa mensal) de todas as contas. */
+const totalExpectedMonthlyYield = computed(() =>
+  allocations.value.reduce((s, row) => s + projectedMonthlyYield(row), 0),
+)
+
 function priorityLevel(row) {
   const p = Number(row.priority)
   return Number.isFinite(p) && p >= 1 && p <= 5 ? p : 0
@@ -78,6 +111,12 @@ function projectedMonthlyYield(row) {
   const monthly = Number(row.monthly_rate) || 0
   return amount * monthly
 }
+
+const { sortedItems: sortedAllocations, toggleSort, sortClass } = useTableSort(
+  allocations,
+  ALLOC_SORT_COLS,
+  { key: 'priority', dir: 'asc' },
+)
 
 function resetForm() {
   Object.assign(form, EMPTY_FORM())
@@ -215,6 +254,81 @@ function buildPayload() {
   }
 }
 
+function openEntryModal(row) {
+  if (!row.objective_id) {
+    errorMsg.value = 'Vincule esta alocação a um objetivo antes de lançar.'
+    return
+  }
+  entryModalObjectiveId.value = row.objective_id
+  entryModalObjectiveName.value = row.objective_name || ''
+  entryModalContextLabel.value = row.bank || ''
+  errorMsg.value = ''
+  showEntryModal.value = true
+}
+
+function onEntryModalSuccess() {
+  showSuccess('Lançamento registado.')
+  showEntryModal.value = false
+  emit('refresh-objectives')
+}
+
+function buildPayloadFromRow(row, amount) {
+  return {
+    objective_id: row.objective_id ?? null,
+    bank: row.bank,
+    type: row.type?.trim() || null,
+    liquidity: row.liquidity?.trim() || null,
+    amount,
+    priority: row.priority ?? null,
+    cdi_percentage: row.cdi_percentage ?? null,
+    monthly_rate: row.monthly_rate ?? null,
+    yearly_rate: row.yearly_rate ?? null,
+    description: row.description ?? null,
+  }
+}
+
+function openAmountEdit(row) {
+  amountEditRow.value = row
+  amountEditValue.value = row.amount != null ? String(row.amount) : ''
+  errorMsg.value = ''
+  showAmountModal.value = true
+}
+
+function closeAmountModal() {
+  if (isAmountSaving.value) return
+  showAmountModal.value = false
+  amountEditRow.value = null
+}
+
+function onAmountModalOverlay(e) {
+  if (e.target === e.currentTarget) closeAmountModal()
+}
+
+async function submitAmountUpdate() {
+  const row = amountEditRow.value
+  if (!row) return
+
+  const amount = parseFloat(String(amountEditValue.value).replace(',', '.'))
+  if (Number.isNaN(amount) || amount <= 0) {
+    errorMsg.value = 'Informe um valor investido positivo.'
+    return
+  }
+
+  isAmountSaving.value = true
+  errorMsg.value = ''
+  try {
+    await allocationsApi.update(row.id, buildPayloadFromRow(row, amount))
+    showSuccess('Valor atualizado. Lançamento da diferença registado no objetivo.')
+    closeAmountModal()
+    await loadAllocations()
+    emit('refresh-objectives')
+  } catch (err) {
+    errorMsg.value = err.message
+  } finally {
+    isAmountSaving.value = false
+  }
+}
+
 function openCreateModal() {
   resetForm()
   errorMsg.value = ''
@@ -252,6 +366,7 @@ async function submitForm() {
     showFormModal.value = false
     resetForm()
     await loadAllocations()
+    if (payload.objective_id) emit('refresh-objectives')
   } catch (err) {
     errorMsg.value = err.message
   } finally {
@@ -277,6 +392,7 @@ async function confirmDelete() {
     }
     showSuccess('Alocação removida.')
     await loadAllocations()
+    if (row.objective_id) emit('refresh-objectives')
   } catch (err) {
     errorMsg.value = err.message
   } finally {
@@ -327,11 +443,22 @@ onMounted(async () => {
         <span class="allocations-summary__label">Contas</span>
         <span class="allocations-summary__value">{{ allocations.length }}</span>
       </div>
+      <div class="allocations-summary__item allocations-summary__item--highlight">
+        <span class="allocations-summary__label">Rend. mensal esperado (total)</span>
+        <span class="allocations-summary__value">{{ brl(totalExpectedMonthlyYield) }}</span>
+      </div>
     </div>
 
     <section class="card allocations-table-card">
       <header class="allocations-table-card__header">
-        <h3 class="allocations-table-card__title">Consolidado de alocações</h3>
+        <div class="allocations-table-card__intro">
+          <h3 class="allocations-table-card__title">Consolidado de alocações</h3>
+          <p class="allocations-table-card__hint">
+            Clique no cabeçalho de uma coluna para ordenar as linhas.
+            O valor acumulado de cada objetivo é a soma das contas vinculadas aqui.
+            Ao alterar o valor de uma conta, a diferença vira lançamento automático no objetivo (ainda não o contrário).
+          </p>
+        </div>
         <button type="button" class="btn btn--primary btn--sm" @click="openCreateModal">
           <unicon name="plus" width="16" height="16" />
           Nova alocação
@@ -347,15 +474,53 @@ onMounted(async () => {
         <table class="table table--allocations">
           <thead>
             <tr>
-              <th>Prioridade</th>
-              <th>Instituição</th>
-              <th>Finalidade</th>
-              <th>Tipo</th>
-              <th>Liquidez</th>
-              <th>Valor</th>
-              <th>% CDI</th>
-              <th>Taxa a.a.</th>
-              <th>Prev. mês</th>
+              <th
+                class="th-sortable col-priority"
+                :class="sortClass('priority')"
+                @click="toggleSort('priority')"
+              >
+                Prioridade
+              </th>
+              <th class="th-sortable" :class="sortClass('bank')" @click="toggleSort('bank')">
+                Instituição
+              </th>
+              <th class="th-sortable" :class="sortClass('objective')" @click="toggleSort('objective')">
+                Objetivo
+              </th>
+              <th class="th-sortable" :class="sortClass('type')" @click="toggleSort('type')">
+                Tipo
+              </th>
+              <th class="th-sortable" :class="sortClass('liquidity')" @click="toggleSort('liquidity')">
+                Liquidez
+              </th>
+              <th
+                class="th-sortable col-amount"
+                :class="sortClass('amount')"
+                @click="toggleSort('amount')"
+              >
+                Valor
+              </th>
+              <th
+                class="th-sortable"
+                :class="sortClass('cdi_percentage')"
+                @click="toggleSort('cdi_percentage')"
+              >
+                % CDI
+              </th>
+              <th
+                class="th-sortable"
+                :class="sortClass('yearly_rate')"
+                @click="toggleSort('yearly_rate')"
+              >
+                Taxa a.a.
+              </th>
+              <th
+                class="th-sortable col-yield"
+                :class="sortClass('monthly_yield')"
+                @click="toggleSort('monthly_yield')"
+              >
+                Prev. mês
+              </th>
               <th class="col-actions">Ações</th>
             </tr>
           </thead>
@@ -363,7 +528,7 @@ onMounted(async () => {
             <tr v-if="allocations.length === 0">
               <td colspan="10" class="table-empty">Nenhuma alocação cadastrada.</td>
             </tr>
-            <tr v-for="row in allocations" :key="row.id">
+            <tr v-for="row in sortedAllocations" :key="row.id">
               <td class="col-priority">
                 <span
                   class="star-rating"
@@ -384,16 +549,34 @@ onMounted(async () => {
               <td>{{ row.objective_name || '—' }}</td>
               <td>{{ row.type || '—' }}</td>
               <td>{{ row.liquidity || '—' }}</td>
-              <td class="col-amount">{{ brl(row.amount) }}</td>
+              <td class="col-amount">
+                <button
+                  type="button"
+                  class="col-amount__btn"
+                  title="Editar valor investido na conta"
+                  @click.stop="openAmountEdit(row)"
+                >
+                  {{ brl(row.amount) }}
+                </button>
+              </td>
               <td>{{ row.cdi_percentage != null ? `${pctFmt(row.cdi_percentage)}%` : '—' }}</td>
               <td>{{ row.yearly_rate != null ? `${rateToPercent(row.yearly_rate)}%` : '—' }}</td>
               <td class="col-yield">{{ brl(projectedMonthlyYield(row)) }}</td>
               <td class="col-actions">
                 <div class="row-actions">
-                  <button type="button" class="btn-icon" title="Editar" @click="openEditModal(row)">
+                  <button
+                    type="button"
+                    class="btn-icon btn-icon--accent"
+                    :title="row.objective_id ? 'Registrar lançamento' : 'Vincule um objetivo para lançar'"
+                    :disabled="!row.objective_id"
+                    @click.stop="openEntryModal(row)"
+                  >
+                    <unicon name="plus" width="16" height="16" />
+                  </button>
+                  <button type="button" class="btn-icon" title="Editar alocação" @click.stop="openEditModal(row)">
                     <unicon name="edit-alt" width="16" height="16" />
                   </button>
-                  <button type="button" class="btn-icon btn-icon--danger" title="Excluir" @click="requestDelete(row)">
+                  <button type="button" class="btn-icon btn-icon--danger" title="Excluir" @click.stop="requestDelete(row)">
                     <unicon name="trash-alt" width="16" height="16" />
                   </button>
                 </div>
@@ -437,7 +620,7 @@ onMounted(async () => {
                 <input id="alloc-bank" v-model="form.bank" type="text" class="form-control" required maxlength="120" />
               </div>
               <div class="form-group">
-                <label class="form-label" for="alloc-objective">Finalidade</label>
+                <label class="form-label" for="alloc-objective">Objetivo</label>
                 <select id="alloc-objective" v-model="form.objective_id" class="form-control app-select">
                   <option value="">— Nenhuma —</option>
                   <option v-for="obj in objectives" :key="obj.id" :value="obj.id">{{ obj.name }}</option>
@@ -494,6 +677,80 @@ onMounted(async () => {
       </div>
     </Transition>
 
+    <InvestmentEntryModal
+      :open="showEntryModal"
+      :objective-id="entryModalObjectiveId"
+      :objective-name="entryModalObjectiveName"
+      :context-label="entryModalContextLabel"
+      :defaults="ENTRY_MODAL_DEFAULTS"
+      @close="showEntryModal = false"
+      @success="onEntryModalSuccess"
+    />
+
+    <!-- Modal: editar valor investido (consolidado) -->
+    <Transition name="modal">
+      <div
+        v-if="showAmountModal && amountEditRow"
+        class="modal-overlay"
+        @click="onAmountModalOverlay"
+      >
+        <div
+          class="modal-card modal-card--amount"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="amount-modal-title"
+        >
+          <header class="modal-card__header">
+            <h3 id="amount-modal-title" class="modal-card__title">Valor investido</h3>
+            <button
+              type="button"
+              class="btn-icon"
+              aria-label="Fechar"
+              :disabled="isAmountSaving"
+              @click="closeAmountModal"
+            >
+              <unicon name="times" width="18" height="18" />
+            </button>
+          </header>
+
+          <form class="modal-card__body" @submit.prevent="submitAmountUpdate" novalidate>
+            <p class="amount-modal__context">
+              <strong>{{ amountEditRow.bank }}</strong>
+              <span v-if="amountEditRow.objective_name"> — {{ amountEditRow.objective_name }}</span>
+            </p>
+            <p class="amount-modal__note">
+              O valor acumulado do objetivo é a soma das contas no consolidado.
+              A diferença em relação ao valor anterior será lançada automaticamente no histórico do objetivo.
+            </p>
+
+            <div class="form-group">
+              <label class="form-label" for="amount-edit-value">Valor (R$)</label>
+              <input
+                id="amount-edit-value"
+                v-model="amountEditValue"
+                type="number"
+                class="form-control"
+                min="0.01"
+                step="0.01"
+                required
+                autofocus
+              />
+            </div>
+
+            <footer class="modal-card__footer">
+              <button type="button" class="btn btn--outline" :disabled="isAmountSaving" @click="closeAmountModal">
+                Cancelar
+              </button>
+              <button type="submit" class="btn btn--primary" :disabled="isAmountSaving">
+                <span v-if="isAmountSaving" class="spinner-ui spinner-ui--sm" aria-hidden="true"></span>
+                {{ isAmountSaving ? 'Salvando…' : 'Salvar valor' }}
+              </button>
+            </footer>
+          </form>
+        </div>
+      </div>
+    </Transition>
+
     <ConfirmModal
       v-if="itemToDelete"
       title="Excluir alocação"
@@ -516,15 +773,30 @@ onMounted(async () => {
 
 .allocations-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   padding: 16px 18px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
+  .allocations-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
   .allocations-summary {
     grid-template-columns: 1fr;
   }
+}
+
+.allocations-summary__item--highlight {
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.allocations-summary__item--highlight .allocations-summary__value {
+  color: var(--color-success-lit, #5ee86a);
 }
 
 .allocations-summary__label {
@@ -561,10 +833,54 @@ onMounted(async () => {
   padding: 16px 18px 12px;
 }
 
+.allocations-table-card__intro {
+  flex: 1;
+  min-width: 200px;
+}
+
 .allocations-table-card__title {
-  margin: 0;
+  margin: 0 0 4px;
   font-size: 1rem;
   font-weight: 700;
+}
+
+.allocations-table-card__hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.col-amount__btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted transparent;
+  transition: color 0.12s, text-decoration-color 0.12s;
+}
+
+.col-amount__btn:hover {
+  color: var(--color-accent);
+  text-decoration-color: var(--color-accent);
+}
+
+.amount-modal__context {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  color: var(--color-text-muted);
+}
+
+.amount-modal__context strong {
+  color: var(--color-text);
+}
+
+.amount-modal__note {
+  margin: 0 0 14px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 }
 
 .allocations-loading {
@@ -614,8 +930,18 @@ onMounted(async () => {
 }
 
 .col-actions {
-  width: 96px;
+  width: 132px;
   text-align: center;
+}
+
+.btn-icon--accent:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: rgba(197, 119, 0, 0.12);
+}
+
+.btn-icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .row-actions {
