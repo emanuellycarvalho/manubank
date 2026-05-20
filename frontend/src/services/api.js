@@ -26,11 +26,20 @@ export const categoriesApi = {
 
 // ── Transactions ────────────────────────────────────────────────────────────
 export const transactionsApi = {
-  list: (monthYear) =>
+  list: (monthYear, includeInternal = false) =>
     http.get('/api_transactions.php', {
-      params: monthYear ? { month_year: monthYear } : {},
+      params: {
+        ...(monthYear ? { month_year: monthYear } : {}),
+        ...(includeInternal ? { include_internal: 1 } : {}),
+      },
     }),
-  availableMonths: () => http.get('/api_transactions.php', { params: { available_months: 1 } }),
+  availableMonths: (includeInternal = false) =>
+    http.get('/api_transactions.php', {
+      params: {
+        available_months: 1,
+        ...(includeInternal ? { include_internal: 1 } : {}),
+      },
+    }),
   updateCategory: (id, categoryId) =>
     http.patch(`/api_transactions.php?id=${id}`, { category_id: categoryId }),
   create: (payload) => http.post('/api_transactions.php', payload),

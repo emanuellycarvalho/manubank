@@ -16,6 +16,9 @@ import {
   formatCycleLabel,
 } from '@/utils/periodCycle.js'
 
+const INTERNAL_CATEGORY_NAME = 'Movimentação interna'
+const SHOW_INTERNAL_KEY = 'manubank_show_internal_transfers'
+
 const TX_SORT_COLS = [
   { key: 'date',        getValue: (t) => t.date },
   { key: 'origin',      getValue: (t) => t.origin },
@@ -45,6 +48,9 @@ const errorMsg         = ref('')
 const categories       = ref([])
 const searchQuery      = ref('')
 const showManualModal  = ref(false)
+const showInternalTransfers = ref(
+  typeof localStorage !== 'undefined' && localStorage.getItem(SHOW_INTERNAL_KEY) === '1'
+)
 
 const PAGE_SIZE_OPTIONS = [
   { value: '25', label: '25' },
@@ -90,9 +96,13 @@ function showToast(message, type = 'success') {
 // ── Load ───────────────────────────────────────────────────────────────────
 async function loadMonths() {
   try {
-    const { data } = await transactionsApi.availableMonths()
+    const { data } = await transactionsApi.availableMonths(showInternalTransfers.value)
     availableMonths.value = data
-    if (!selectedMonth.value && data.length) selectedMonth.value = data[0]
+    if (selectedMonth.value && !data.includes(selectedMonth.value)) {
+      selectedMonth.value = data[0] ?? ''
+    } else if (!selectedMonth.value && data.length) {
+      selectedMonth.value = data[0]
+    }
   } catch (err) {
     errorMsg.value = err.message
   }
@@ -102,13 +112,24 @@ async function loadTransactions() {
   isLoading.value = true
   errorMsg.value  = ''
   try {
-    const { data } = await transactionsApi.list(selectedMonth.value)
+    const { data } = await transactionsApi.list(
+      selectedMonth.value,
+      showInternalTransfers.value,
+    )
     transactions.value = data
   } catch (err) {
     errorMsg.value = err.message
   } finally {
     isLoading.value = false
   }
+}
+
+async function toggleInternalTransfers() {
+  showInternalTransfers.value = !showInternalTransfers.value
+  localStorage.setItem(SHOW_INTERNAL_KEY, showInternalTransfers.value ? '1' : '0')
+  selectedIds.value = new Set()
+  await loadMonths()
+  await loadTransactions()
 }
 
 async function onMonthChange() {
@@ -272,8 +293,13 @@ function amountClass(type) {
   return isSaida(type) ? 'amount--out' : 'amount--in'
 }
 
-function rowClass(type) {
-  return isSaida(type) ? 'row--out' : 'row--in'
+function isInternalTransfer(tx) {
+  return tx.category_name === INTERNAL_CATEGORY_NAME
+}
+
+function rowClass(tx) {
+  if (isInternalTransfer(tx)) return 'row--internal'
+  return isSaida(tx.type) ? 'row--out' : 'row--in'
 }
 
 // ── Inline category change ──────────────────────────────────────────────────
@@ -474,7 +500,13 @@ async function confirmDelete() {
       <div>
         <h2 class="page-title">Extrato</h2>
         <p class="page-subtitle">
-          Histórico de transações importadas. Movimentação interna (Pix entre suas contas) não aparece aqui.
+          Histórico de transações importadas.
+          <template v-if="showInternalTransfers">
+            Inclui movimentação interna (Pix entre suas contas).
+          </template>
+          <template v-else>
+            Movimentação interna oculta — ative o filtro abaixo para exibir.
+          </template>
         </p>
       </div>
 
@@ -569,6 +601,7 @@ async function confirmDelete() {
             autocomplete="off"
           />
         </label>
+
         <p v-if="hasSearchFilter" class="search-hint">
           {{ sortedTransactions.length }} de {{ transactions.length }} transações
         </p>
@@ -588,10 +621,29 @@ async function confirmDelete() {
             Excluir selecionadas
           </button>
         </div>
-        <button type="button" class="btn btn--primary" @click="showManualModal = true">
-          <unicon name="plus" width="16" height="16" />
-          Nova transação
-        </button>
+        <div class="toolbar-actions">
+          <button
+            type="button"
+            class="btn btn--internal-toggle"
+            :class="showInternalTransfers ? 'btn--internal-toggle--on' : 'btn--internal-toggle--off'"
+            :title="showInternalTransfers
+              ? 'Ocultar movimentações internas (Pix entre suas contas)'
+              : 'Exibir movimentações internas (Pix entre suas contas)'"
+            :aria-pressed="showInternalTransfers"
+            @click="toggleInternalTransfers"
+          >
+            <unicon
+              :name="showInternalTransfers ? 'eye' : 'eye-slash'"
+              width="16"
+              height="16"
+            />
+            Movimentações internas
+          </button>
+          <button type="button" class="btn btn--primary" @click="showManualModal = true">
+            <unicon name="plus" width="16" height="16" />
+            Nova transação
+          </button>
+        </div>
       </div>
 
       <div v-if="!transactions.length" class="empty-state">
@@ -645,7 +697,7 @@ async function confirmDelete() {
           <tr
             v-for="tx in paginatedTransactions"
             :key="tx.id"
-            :class="[rowClass(tx.type), isSelected(tx.id) && 'row--selected']"
+            :class="[rowClass(tx), isSelected(tx.id) && 'row--selected']"
           >
             <td class="col-select">
               <input
@@ -863,24 +915,6 @@ async function confirmDelete() {
   flex-wrap: wrap;
 }
 
-.btn.btn--primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: 0.88rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  white-space: nowrap;
-}
-
-.btn.btn--primary:hover { filter: brightness(1.08); }
-
 .table-toolbar {
   display: flex;
   align-items: flex-end;
@@ -889,9 +923,62 @@ async function confirmDelete() {
   flex-wrap: wrap;
 }
 
-.table-toolbar .btn--primary {
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.toolbar-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 35px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.toolbar-actions .btn :deep(svg) {
+  display: block;
+  flex-shrink: 0;
+}
+
+.toolbar-actions .btn.btn--primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.toolbar-actions .btn.btn--primary:hover { filter: brightness(1.08); }
+
+.toolbar-actions .btn.btn--internal-toggle--off {
+  background: transparent;
+  color: var(--color-text-muted);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+}
+
+.toolbar-actions .btn.btn--internal-toggle--off:hover {
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  color: var(--color-text);
+}
+
+.toolbar-actions .btn.btn--internal-toggle--on {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.toolbar-actions .btn.btn--internal-toggle--on:hover {
+  filter: brightness(1.08);
 }
 
 .selection-bar {
@@ -1166,6 +1253,11 @@ async function confirmDelete() {
 
 .row--in  { border-left: 3px solid var(--color-success); }
 .row--out { border-left: 3px solid var(--color-error); }
+.row--internal {
+  border-left: 3px solid var(--color-text-muted);
+  opacity: 0.92;
+}
+.row--internal .amount { color: var(--color-text-muted); }
 
 /* Resize handle — right edge of each <th> */
 .resize-handle {

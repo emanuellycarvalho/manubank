@@ -237,7 +237,9 @@ try {
         jsonResponse(['success' => true]);
     }
 
-    $excludeInternal = InternalTransferService::sqlExcludeFromTotals('t');
+    $includeInternal = isset($_GET['include_internal'])
+        && in_array((string) $_GET['include_internal'], ['1', 'true'], true);
+    $excludeInternal = $includeInternal ? '' : InternalTransferService::sqlExcludeFromTotals('t');
 
     // Retorna apenas a lista de meses disponíveis (para popular o filtro)
     if (isset($_GET['available_months'])) {
