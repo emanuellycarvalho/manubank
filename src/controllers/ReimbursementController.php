@@ -13,6 +13,12 @@ declare(strict_types=1);
  */
 final class ReimbursementController
 {
+    /** Nomes aceites para a categoria de empréstimos/reembolsos (primeiro encontrado prevalece). */
+    private const REIMBURSEMENT_CATEGORY_NAMES = [
+        'Reembolso/Terceiros',
+        'Empréstimo/Reembolsos',
+    ];
+
     public function __construct(private readonly PDO $pdo)
     {
     }
@@ -37,18 +43,30 @@ final class ReimbursementController
             throw new \InvalidArgumentException("Transação #{$transactionId} não encontrada.");
         }
 
-        $stmt = $this->pdo->prepare(
-            "INSERT INTO reimbursement_claims (transaction_id, expected_amount, description, status)
-             VALUES (:transaction_id, :expected_amount, :description, 'Aberto')"
-        );
+        $this->pdo->beginTransaction();
 
-        $stmt->execute([
-            ':transaction_id'  => $transactionId,
-            ':expected_amount' => $expectedAmount,
-            ':description'     => $description,
-        ]);
+        try {
+            $stmt = $this->pdo->prepare(
+                "INSERT INTO reimbursement_claims (transaction_id, expected_amount, description, status)
+                 VALUES (:transaction_id, :expected_amount, :description, 'Aberto')"
+            );
 
-        return (int) $this->pdo->lastInsertId();
+            $stmt->execute([
+                ':transaction_id'  => $transactionId,
+                ':expected_amount' => $expectedAmount,
+                ':description'     => $description,
+            ]);
+
+            $claimId = (int) $this->pdo->lastInsertId();
+            $this->assignReimbursementCategory($transactionId);
+
+            $this->pdo->commit();
+
+            return $claimId;
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
     }
 
     /**
@@ -112,6 +130,8 @@ final class ReimbursementController
                 $updateStatus->execute([':status' => $status, ':id' => $claimId]);
             }
 
+            $this->assignReimbursementCategory($incomeTransactionId);
+
             $this->pdo->commit();
         } catch (\Throwable $e) {
             $this->pdo->rollBack();
@@ -161,13 +181,28 @@ final class ReimbursementController
     /**
      * Lista todos os claims com status 'Aberto' ou 'Parcial', com info da transação original.
      *
-     * @return array<int, array{id: int, description: string, expected_amount: float, status: string, date: string, translated_description: string, month_year: string}>
+     * @return array<int, array{
+     *   id: int,
+     *   description: string,
+     *   expected_amount: float,
+     *   paid_amount: float,
+     *   outstanding_amount: float,
+     *   status: string,
+     *   date: string,
+     *   translated_description: string,
+     *   month_year: string
+     * }>
      */
     public function getActiveClaims(): array
     {
         $stmt = $this->pdo->query(
             "SELECT rc.id, rc.description, rc.expected_amount, rc.status,
-                    t.date, t.translated_description, t.month_year
+                    t.date, t.translated_description, t.month_year,
+                    COALESCE((
+                        SELECT SUM(rp.paid_amount)
+                        FROM reimbursement_payments rp
+                        WHERE rp.claim_id = rc.id
+                    ), 0) AS paid_amount
              FROM reimbursement_claims rc
              JOIN transactions t ON t.id = rc.transaction_id
              WHERE rc.status IN ('Aberto', 'Parcial')
@@ -176,15 +211,23 @@ final class ReimbursementController
 
         $rows = $stmt->fetchAll();
 
-        return array_map(static fn(array $row): array => [
-            'id'                     => (int) $row['id'],
-            'description'            => $row['description'],
-            'expected_amount'        => (float) $row['expected_amount'],
-            'status'                 => $row['status'],
-            'date'                   => $row['date'],
-            'translated_description' => $row['translated_description'],
-            'month_year'             => $row['month_year'],
-        ], $rows);
+        return array_map(static function (array $row): array {
+            $expected    = (float) $row['expected_amount'];
+            $paid        = (float) $row['paid_amount'];
+            $outstanding = max(0.0, round($expected - $paid, 2));
+
+            return [
+                'id'                     => (int) $row['id'],
+                'description'            => $row['description'],
+                'expected_amount'        => round($expected, 2),
+                'paid_amount'            => round($paid, 2),
+                'outstanding_amount'     => $outstanding,
+                'status'                 => $row['status'],
+                'date'                   => $row['date'],
+                'translated_description' => $row['translated_description'],
+                'month_year'             => $row['month_year'],
+            ];
+        }, $rows);
     }
 
     /**
@@ -251,5 +294,52 @@ final class ReimbursementController
             'settled_amount' => round($settledAmount, 2),
             'claims'         => $claims,
         ];
+    }
+
+    /**
+     * Atribui a categoria de reembolsos/empréstimos a uma transação.
+     */
+    private function assignReimbursementCategory(int $transactionId): void
+    {
+        $categoryId = $this->resolveReimbursementCategoryId();
+
+        if ($categoryId === null) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare(
+            'UPDATE transactions SET category_id = :category_id WHERE id = :id'
+        );
+        $stmt->execute([
+            ':category_id' => $categoryId,
+            ':id'          => $transactionId,
+        ]);
+    }
+
+    /**
+     * Resolve o ID da categoria de reembolsos por nome (lista de aliases).
+     */
+    private function resolveReimbursementCategoryId(): ?int
+    {
+        $placeholders = implode(',', array_fill(0, count(self::REIMBURSEMENT_CATEGORY_NAMES), '?'));
+
+        $stmt = $this->pdo->prepare(
+            "SELECT id, name FROM categories
+             WHERE is_active = 1 AND name IN ({$placeholders})"
+        );
+        $stmt->execute(self::REIMBURSEMENT_CATEGORY_NAMES);
+
+        $byName = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $byName[$row['name']] = (int) $row['id'];
+        }
+
+        foreach (self::REIMBURSEMENT_CATEGORY_NAMES as $name) {
+            if (isset($byName[$name])) {
+                return $byName[$name];
+            }
+        }
+
+        return null;
     }
 }

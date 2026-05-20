@@ -23,6 +23,8 @@ final class ReimbursementControllerTest extends TestCase
     /** ID de uma transação de entrada pré-inserida para os testes. */
     private int $incomeTransactionId;
 
+    private int $reimbursementCategoryId;
+
     protected function setUp(): void
     {
         $this->pdo = new \PDO('sqlite::memory:', null, null, [
@@ -75,6 +77,17 @@ final class ReimbursementControllerTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
 
         $this->controller->createClaim($this->expenseTransactionId, -10.0, 'Teste');
+    }
+
+    public function testCreateClaimAssignsReimbursementCategory(): void
+    {
+        $this->controller->createClaim($this->expenseTransactionId, 50.00, 'Rateio jantar');
+
+        $catId = (int) $this->pdo->query(
+            "SELECT category_id FROM transactions WHERE id = {$this->expenseTransactionId}"
+        )->fetchColumn();
+
+        $this->assertSame($this->reimbursementCategoryId, $catId);
     }
 
     // ---------------------------------------------------------------------------
@@ -149,6 +162,21 @@ final class ReimbursementControllerTest extends TestCase
         ]);
     }
 
+    public function testRegisterPaymentAssignsReimbursementCategoryToIncome(): void
+    {
+        $claimId = $this->controller->createClaim($this->expenseTransactionId, 50.00, 'Rateio');
+
+        $this->controller->registerPayment($this->incomeTransactionId, [
+            ['claim_id' => $claimId, 'paid_amount' => 50.00],
+        ]);
+
+        $catId = (int) $this->pdo->query(
+            "SELECT category_id FROM transactions WHERE id = {$this->incomeTransactionId}"
+        )->fetchColumn();
+
+        $this->assertSame($this->reimbursementCategoryId, $catId);
+    }
+
     // ---------------------------------------------------------------------------
     // getEffectiveExpenses
     // ---------------------------------------------------------------------------
@@ -212,6 +240,23 @@ final class ReimbursementControllerTest extends TestCase
         $this->assertNotContains($claimId, $ids);
     }
 
+    public function testGetActiveClaimsReturnsOutstandingAfterPartialPayment(): void
+    {
+        $claimId = $this->controller->createClaim($this->expenseTransactionId, 100.00, 'Rateio');
+
+        $this->controller->registerPayment($this->incomeTransactionId, [
+            ['claim_id' => $claimId, 'paid_amount' => 35.00],
+        ]);
+
+        $claims = $this->controller->getActiveClaims();
+        $claim  = array_values(array_filter($claims, fn(array $c): bool => $c['id'] === $claimId))[0];
+
+        $this->assertSame('Parcial', $claim['status']);
+        $this->assertEqualsWithDelta(100.00, $claim['expected_amount'], 0.001);
+        $this->assertEqualsWithDelta(35.00, $claim['paid_amount'], 0.001);
+        $this->assertEqualsWithDelta(65.00, $claim['outstanding_amount'], 0.001);
+    }
+
     // ---------------------------------------------------------------------------
     // Helpers de setup
     // ---------------------------------------------------------------------------
@@ -269,6 +314,9 @@ final class ReimbursementControllerTest extends TestCase
     {
         $this->pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Transporte', 'Variável', '#6B8D9E')");
         $catId = (int) $this->pdo->lastInsertId();
+
+        $this->pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Reembolso/Terceiros', 'Neutro', '#7CB0A5')");
+        $this->reimbursementCategoryId = (int) $this->pdo->lastInsertId();
 
         $this->pdo->exec("INSERT INTO transactions
             (category_id, type, date, origin, operation, amount, raw_description, month_year)

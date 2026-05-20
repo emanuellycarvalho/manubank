@@ -18,6 +18,12 @@ require_once __DIR__ . '/../../src/db/Database.php';
  */
 final class RuleEngine
 {
+    /** Categoria padrão quando nenhuma regra corresponde (não confundir com "Outros"). */
+    public const UNKNOWN_CATEGORY_NAME = 'Não sei';
+
+    private const UNKNOWN_CATEGORY_TYPE  = 'Neutro';
+    private const UNKNOWN_CATEGORY_COLOR = '#8A8F9E';
+
     /**
      * Regras de parsing ativas, ordenadas por id ASC.
      * A primeira regra que corresponder vence (comportamento determinístico).
@@ -26,20 +32,18 @@ final class RuleEngine
      */
     private array $rules;
 
-    /** ID da categoria "Outros", usado como fallback quando nenhuma regra corresponde. */
-    private int $othersCategoryId;
+    /** ID da categoria "Não sei", usado como fallback quando nenhuma regra corresponde. */
+    private int $unknownCategoryId;
 
     /**
      * @param PDO|null $pdo Conexão PDO opcional (útil em testes); usa o singleton por omissão.
-     *
-     * @throws \RuntimeException Se a categoria "Outros" não existir na base de dados.
      */
     public function __construct(?PDO $pdo = null)
     {
         $connection = $pdo ?? Database::getConnection();
 
-        $this->othersCategoryId = $this->resolveOthersCategoryId($connection);
-        $this->rules            = $this->loadActiveRules($connection);
+        $this->unknownCategoryId = $this->resolveUnknownCategoryId($connection);
+        $this->rules             = $this->loadActiveRules($connection);
     }
 
     /**
@@ -47,7 +51,7 @@ final class RuleEngine
      *
      * A correspondência é case-insensitive (mb_stripos / stripos). A primeira regra
      * por ordem de id que coincidir é retornada; em caso de nenhum match,
-     * retorna a descrição original e a categoria "Outros".
+     * retorna a descrição original e a categoria "Não sei".
      *
      * @return array{translated_description: string, category_id: int}
      */
@@ -64,7 +68,7 @@ final class RuleEngine
 
         return [
             'translated_description' => $rawDescription,
-            'category_id'            => $this->othersCategoryId,
+            'category_id'            => $this->unknownCategoryId,
         ];
     }
 
@@ -117,31 +121,39 @@ final class RuleEngine
 
         return array_map(
             static fn(array $row): array => [
-                'substring'      => $row['substring'],
+                'substring'       => $row['substring'],
                 'translated_name' => $row['translated_name'],
-                'category_id'    => (int) $row['category_id'],
+                'category_id'     => (int) $row['category_id'],
             ],
             $stmt->fetchAll()
         );
     }
 
     /**
-     * Resolve o id da categoria "Outros".
-     *
-     * @throws \RuntimeException Se a categoria não existir.
+     * Resolve o id da categoria "Não sei", criando-a se ainda não existir.
      */
-    private function resolveOthersCategoryId(PDO $pdo): int
+    private function resolveUnknownCategoryId(PDO $pdo): int
     {
-        $stmt = $pdo->prepare("SELECT id FROM categories WHERE name = 'Outros' LIMIT 1");
-        $stmt->execute();
+        $stmt = $pdo->prepare(
+            'SELECT id FROM categories WHERE name = :name LIMIT 1'
+        );
+        $stmt->execute([':name' => self::UNKNOWN_CATEGORY_NAME]);
         $row = $stmt->fetch();
 
-        if ($row === false) {
-            throw new \RuntimeException(
-                'Categoria "Outros" não encontrada. Execute: php src/db/seeder_categories.php'
-            );
+        if ($row !== false) {
+            return (int) $row['id'];
         }
 
-        return (int) $row['id'];
+        $insert = $pdo->prepare(
+            'INSERT INTO categories (name, type, color, is_active)
+             VALUES (:name, :type, :color, 1)'
+        );
+        $insert->execute([
+            ':name'  => self::UNKNOWN_CATEGORY_NAME,
+            ':type'  => self::UNKNOWN_CATEGORY_TYPE,
+            ':color' => self::UNKNOWN_CATEGORY_COLOR,
+        ]);
+
+        return (int) $pdo->lastInsertId();
     }
 }

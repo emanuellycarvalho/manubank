@@ -84,8 +84,8 @@ try {
                 jsonResponse(['error' => "Categoria #{$categoryId} não encontrada."], 422);
             }
 
-            $othersId = (int) $pdo->query(
-                "SELECT id FROM categories WHERE LOWER(name) = 'outros' LIMIT 1"
+            $unknownId = (int) $pdo->query(
+                "SELECT id FROM categories WHERE name = 'Não sei' LIMIT 1"
             )->fetchColumn();
 
             // Verifica duplicação de substring
@@ -106,7 +106,7 @@ try {
                 $existingRuleId   = (int) $existing['id'];
 
                 $updated = 0;
-                if ($othersId > 0) {
+                if ($unknownId > 0) {
                     $upd = $pdo->prepare(
                         "UPDATE transactions
                          SET category_id            = ?,
@@ -114,7 +114,7 @@ try {
                          WHERE category_id = ?
                            AND LOWER(raw_description) LIKE LOWER(?)"
                     );
-                    $upd->execute([$applyCategory, $applyTranslation, $othersId, '%' . $substring . '%']);
+                    $upd->execute([$applyCategory, $applyTranslation, $unknownId, '%' . $substring . '%']);
                     $updated = $upd->rowCount();
                 }
 
@@ -135,9 +135,9 @@ try {
             $stmt->execute([$categoryId, $substring, $translatedName]);
             $newRuleId = (int) $pdo->lastInsertId();
 
-            // Retroage nas transações existentes que estão em "Outros" e batem com o substring
+            // Retroage nas transações em "Não sei" que batem com o substring
             $updated = 0;
-            if ($othersId > 0) {
+            if ($unknownId > 0) {
                 $upd = $pdo->prepare(
                     "UPDATE transactions
                      SET category_id            = ?,
@@ -145,7 +145,7 @@ try {
                      WHERE category_id = ?
                        AND LOWER(raw_description) LIKE LOWER(?)"
                 );
-                $upd->execute([$categoryId, $translatedName, $othersId, '%' . $substring . '%']);
+                $upd->execute([$categoryId, $translatedName, $unknownId, '%' . $substring . '%']);
                 $updated = $upd->rowCount();
             }
 

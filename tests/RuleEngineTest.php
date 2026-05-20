@@ -16,7 +16,7 @@ final class RuleEngineTest extends TestCase
 {
     private \PDO $pdo;
     private \RuleEngine $engine;
-    private int $outrosCategoryId;
+    private int $naoSeiCategoryId;
 
     protected function setUp(): void
     {
@@ -54,8 +54,10 @@ final class RuleEngineTest extends TestCase
         $this->pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Lazer', 'Variável', '#A09CD9')");
         $catLazer = (int) $this->pdo->lastInsertId();
 
+        $this->pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Não sei', 'Neutro', '#8A8F9E')");
+        $this->naoSeiCategoryId = (int) $this->pdo->lastInsertId();
+
         $this->pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Outros', 'Variável', '#9C9C9C')");
-        $this->outrosCategoryId = (int) $this->pdo->lastInsertId();
 
         // Inserir regras mínimas
         $stmt = $this->pdo->prepare(
@@ -96,26 +98,27 @@ final class RuleEngineTest extends TestCase
 
         if ($isFallback) {
             $this->assertSame(
-                $this->outrosCategoryId,
+                $this->naoSeiCategoryId,
                 $result['category_id'],
-                'Fallback deve usar o category_id de "Outros" da DB, não um ID fixo.'
+                'Fallback deve usar o category_id de "Não sei" da DB, não um ID fixo.'
             );
         } else {
-            $this->assertNotSame($this->outrosCategoryId, $result['category_id']);
+            $this->assertNotSame($this->naoSeiCategoryId, $result['category_id']);
         }
     }
 
-    public function testThrowsWhenOutrosCategoryMissing(): void
+    public function testCreatesNaoSeiCategoryWhenMissing(): void
     {
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessageMatches('/Outros/');
-
         $emptyPdo = new \PDO('sqlite::memory:', null, null, [
             \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
         ]);
-        $emptyPdo->exec('CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT, type TEXT, color TEXT, is_active INTEGER)');
+        $emptyPdo->exec('CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT, type TEXT, color TEXT, is_active INTEGER DEFAULT 1)');
         $emptyPdo->exec('CREATE TABLE parsing_rules (id INTEGER PRIMARY KEY, category_id INTEGER, substring TEXT, translated_name TEXT, is_active INTEGER)');
 
-        new \RuleEngine($emptyPdo);
+        $engine = new \RuleEngine($emptyPdo);
+        $result = $engine->applyRules('LOJA XYZ');
+
+        $name = $emptyPdo->query("SELECT name FROM categories WHERE id = {$result['category_id']}")->fetchColumn();
+        $this->assertSame('Não sei', $name);
     }
 }

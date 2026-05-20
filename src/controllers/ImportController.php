@@ -83,7 +83,7 @@ final class ImportController
         }
 
         try {
-            $rows = $this->runParser($parserType, $tmpPath);
+            $rows = $this->runParser($parserType, $tmpPath, $originalName);
         } catch (\RuntimeException $e) {
             return [
                 'success'           => false,
@@ -130,12 +130,12 @@ final class ImportController
      *
      * @throws \RuntimeException Propagada do parser.
      */
-    private function runParser(string $parserType, string $filePath): array
+    private function runParser(string $parserType, string $filePath, string $originalName = ''): array
     {
         if ($parserType === 'nubank') {
             $parser = new NubankParser($this->ruleEngine);
 
-            return $parser->parse($filePath);
+            return $parser->parse($filePath, $originalName);
         }
 
         $parser = new MercadoPagoParser($this->ruleEngine);

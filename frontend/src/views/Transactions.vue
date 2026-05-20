@@ -371,10 +371,14 @@ async function onRuleCreated(data) {
 
 async function onClaimCreated() {
   closeModal()
+  await loadTransactions()
+  showToast('Pendência criada. Categoria ajustada para Reembolso/Terceiros.')
 }
 
 async function onPaymentRegistered() {
   closeModal()
+  await loadTransactions()
+  showToast('Reembolso registado. Categoria ajustada para Reembolso/Terceiros.')
 }
 
 function isSelected(id) {
@@ -469,7 +473,9 @@ async function confirmDelete() {
     <header class="page-header">
       <div>
         <h2 class="page-title">Extrato</h2>
-        <p class="page-subtitle">Histórico de transações importadas</p>
+        <p class="page-subtitle">
+          Histórico de transações importadas. Movimentação interna (Pix entre suas contas) não aparece aqui.
+        </p>
       </div>
 
       <div class="header-actions">
@@ -714,7 +720,7 @@ async function confirmDelete() {
               </button>
 
               <span
-                v-if="tx.category_name === 'Outros'"
+                v-if="tx.category_name === 'Não sei'"
                 class="action-tooltip"
               >
                 <button

@@ -30,7 +30,7 @@ final class NubankParserTest extends TestCase
 
         $pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Transporte', 'Variável', '#6B8D9E')");
         $catTransporte = (int) $pdo->lastInsertId();
-        $pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Outros', 'Variável', '#9C9C9C')");
+        $pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Não sei', 'Neutro', '#8A8F9E')");
 
         $pdo->exec("INSERT INTO parsing_rules (category_id, substring, translated_name) VALUES ({$catTransporte}, 'uber', 'Transporte')");
 
@@ -44,22 +44,25 @@ final class NubankParserTest extends TestCase
     public static function nubankLineProvider(): array
     {
         return [
-            // --- Formato original (•••• como U+2022) ---
             'transacao simples'      => [
-                '15 ABR  ••••  1234  Uber Eats             R$ 45,90',
+                '15 ABR •••• 1234 Uber Eats R$ 45,90',
                 45.90, null, null, '2026-04-15',
             ],
             'com parcela'            => [
-                '02 ABR  ••••  1234  Netflix  - Parcela 2/12  R$ 55,90',
+                '02 ABR •••• 1234 Netflix - Parcela 2/12 R$ 55,90',
                 55.90, 2, 12, '2026-04-02',
             ],
             'valor com milhar'       => [
-                '28 ABR  ••••  1234  Farmacia  - Parcela 1/3  R$ 1.200,00',
+                '28 ABR •••• 1234 Farmacia - Parcela 1/3 R$ 1.200,00',
                 1200.00, 1, 3, '2026-04-28',
             ],
             'sem match no ruleengine' => [
-                '10 MAI  ••••  9999  Loja Desconhecida ABC  R$ 12,00',
+                '10 MAI •••• 9999 Loja Desconhecida ABC R$ 12,00',
                 12.00, null, null, '2026-05-10',
+            ],
+            'exemplo usuario ifood'  => [
+                '29 AGO •••• 1470 Ifd*59263767 Maria Ale R$ 13,44',
+                13.44, null, null, '2026-08-29',
             ],
             // --- Formato real do PDF (single space, MAR/ABR PT-BR) ---
             'real pdf parcela'        => [
@@ -100,7 +103,7 @@ final class NubankParserTest extends TestCase
 
         $row = $rows[0];
         $this->assertSame('saída', $row['type']);
-        $this->assertSame('Nubank', $row['origin']);
+        $this->assertSame('Nubank Fatura', $row['origin']);
         $this->assertSame('Credito', $row['operation']);
         $this->assertEqualsWithDelta($expectedAmount, $row['amount'], 0.001);
         $this->assertSame($expectedDate, $row['date']);
@@ -113,16 +116,66 @@ final class NubankParserTest extends TestCase
 
     public function testParseTextWithUberAppliesRule(): void
     {
-        $rows = $this->parser->parseText('15 ABR  ••••  1234  Uber Trip  R$ 30,00');
+        $rows = $this->parser->parseText('15 ABR •••• 1234 Uber Trip R$ 30,00');
 
         $this->assertSame('Transporte', $rows[0]['translated_description']);
     }
 
     public function testParseTextNoMatchFallsBackToRawDescription(): void
     {
-        $rows = $this->parser->parseText('15 ABR  ••••  1234  Loja XYZ Desconhecida  R$ 10,00');
+        $rows = $this->parser->parseText('15 ABR •••• 1234 Loja XYZ Desconhecida R$ 10,00');
 
         $this->assertSame('Loja XYZ Desconhecida', $rows[0]['translated_description']);
+    }
+
+    public function testParseTextPdfBlobWithHeaderAndGluedLines(): void
+    {
+        $text = <<<'TEXT'
+Nubank Cartão de Crédito Fatura Abril/2026 Total R$ 1.234,56
+29 MAR •••• 1470 Mercadolivre*Mercadol - Parcela 6/12 R$ 286,58 02 ABR •••• 8812 Dl *Uber*Rides R$ 5,91
+TEXT;
+
+        $rows = $this->parser->parseText($text);
+
+        $this->assertCount(2, $rows, 'Deve separar transações coladas no texto do PDF.');
+        $this->assertSame('2026-03-29', $rows[0]['date']);
+        $this->assertSame('2026-04-02', $rows[1]['date']);
+    }
+
+    public function testParseTextDoubleSpacesAndNoSpaceAfterCurrency(): void
+    {
+        $rows = $this->parser->parseText('15 ABR  ••••  1234  Uber Eats  R$45,90');
+
+        $this->assertCount(1, $rows);
+        $this->assertEqualsWithDelta(45.90, $rows[0]['amount'], 0.001);
+    }
+
+    public function testParseTextMasklessCardDigits(): void
+    {
+        $rows = $this->parser->parseText('29 AGO 1470 Ifd*59263767 Maria Ale R$ 13,44');
+
+        $this->assertCount(1, $rows);
+        $this->assertEqualsWithDelta(13.44, $rows[0]['amount'], 0.001);
+    }
+
+    public function testParseTextRealPdfGluedMerchantAndTabBeforeAmount(): void
+    {
+        $rows = $this->parser->parseText("29 AGO •••• 1470Ifd*59263767 Maria Ale\tR\$ 13,44");
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('Ifd*59263767 Maria Ale', $rows[0]['raw_description']);
+        $this->assertEqualsWithDelta(13.44, $rows[0]['amount'], 0.001);
+    }
+
+    public function testParseTextRealPdfFixtureExtractsAllCharges(): void
+    {
+        $text = file_get_contents(__DIR__ . '/fixtures/nubank_pdf_lines.txt');
+        $rows = $this->parser->parseText($text);
+
+        $this->assertCount(8, $rows, 'Deve ignorar pagamentos/saldo e extrair só compras.');
+        $this->assertSame('Ifd*59263767 Maria Ale', $rows[0]['raw_description']);
+        $this->assertEqualsWithDelta(139.90, $rows[6]['amount'], 0.001);
+        $this->assertEqualsWithDelta(56.29, $rows[7]['amount'], 0.001);
     }
 
     public function testParseTextEmptyTextReturnsEmptyArray(): void
@@ -160,14 +213,96 @@ TEXT;
         $this->assertSame('2026-04-02', $rows[1]['date']);
         $this->assertEqualsWithDelta(5.91, $rows[1]['amount'], 0.001);
         $this->assertSame('saída', $rows[1]['type']);
-        $this->assertSame('Nubank', $rows[1]['origin']);
+        $this->assertSame('Nubank Fatura', $rows[1]['origin']);
+    }
+
+    public function testResolveTransactionYearOctoberInvoice(): void
+    {
+        $text = 'TRANSAÇÕES DE 29 AGO A 28 SET';
+
+        $this->assertSame(
+            2025,
+            \NubankParser::resolveTransactionYear($text, 'Nubank_2025-10-06.pdf')
+        );
+    }
+
+    public function testResolveTransactionYearDecemberInvoiceDueJanuary(): void
+    {
+        $text = <<<'TEXT'
+TRANSAÇÕES DE 29 NOV A 28 DEZ
+27 DEZ •••• 1470Amazon	R$ 56,29
+TEXT;
+
+        $this->assertSame(
+            2025,
+            \NubankParser::resolveTransactionYear($text, 'Nubank_2026-01-06.pdf')
+        );
+    }
+
+    public function testResolveTransactionYearNovemberInvoiceDueDecember(): void
+    {
+        $text = 'TRANSAÇÕES DE 29 OUT A 28 NOV';
+
+        $this->assertSame(
+            2025,
+            \NubankParser::resolveTransactionYear($text, 'Nubank_2025-12-06.pdf')
+        );
+    }
+
+    public function testDueDateFromFilenameRejectsInvalidName(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Nome do PDF inválido');
+
+        \NubankParser::dueDateFromFilename('fatura-outubro.pdf');
+    }
+
+    public function testParseTextWithResolvedYearDecemberInvoice(): void
+    {
+        $text = <<<'TEXT'
+TRANSAÇÕES DE 29 NOV A 28 DEZ
+15 DEZ •••• 1470Loja Teste	R$ 10,00
+TEXT;
+
+        $year   = \NubankParser::resolveTransactionYear($text, 'Nubank_2026-01-06.pdf');
+        $parser = new \NubankParser($this->engine, $year);
+        $rows   = $parser->parseText($text);
+
+        $this->assertSame('2025-12-15', $rows[0]['date']);
     }
 
     public function testParseThrowsForMissingFile(): void
     {
         $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('não encontrado ou ilegível');
 
         $this->parser->parse('/caminho/inexistente/fatura.pdf');
+    }
+
+    public function testParseThrowsWhenPdfIsInvalidOrHasNoTransactions(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'nubank_');
+        $this->assertNotFalse($tmp);
+        $pdfPath = $tmp . '.pdf';
+        rename($tmp, $pdfPath);
+        file_put_contents($pdfPath, '%PDF-1.4 fake content without transaction lines');
+
+        try {
+            $this->parser->parse($pdfPath);
+            $this->fail('Deveria lançar RuntimeException para PDF inválido ou sem transações.');
+        } catch (\RuntimeException $e) {
+            $msg = $e->getMessage();
+            $this->assertTrue(
+                str_contains($msg, 'Nenhuma transação reconhecida')
+                || str_contains($msg, 'Não foi possível ler')
+                || str_contains($msg, 'não contém texto'),
+                "Mensagem inesperada: {$msg}"
+            );
+        } finally {
+            if (file_exists($pdfPath)) {
+                unlink($pdfPath);
+            }
+        }
     }
 
     public function testParseTextEstornoRefund(): void

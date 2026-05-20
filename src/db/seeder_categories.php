@@ -34,6 +34,7 @@ const CATEGORIES = [
     ['name' => 'Variedades',          'type' => 'Variável', 'color' => '#B8B8B8'],
     ['name' => 'Reembolso/Terceiros', 'type' => 'Neutro',   'color' => '#7CB0A5'],
     ['name' => 'Movimentação interna', 'type' => 'Neutro',   'color' => '#8A8F9E'],
+    ['name' => 'Não sei',            'type' => 'Neutro',   'color' => '#8A8F9E'],
     ['name' => 'Outros',              'type' => 'Variável', 'color' => '#9C9C9C'],
     ['name' => 'Atlética',            'type' => 'Variável', 'color' => '#5C8F9E'],
     ['name' => 'Casa',                'type' => 'Fixo',     'color' => '#A89A7A'],

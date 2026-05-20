@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { reimbursementsApi } from '@/services/api.js'
+import { fmtMonthYear } from '@/utils/dates.js'
 
 // ── Props / Emits ──────────────────────────────────────────────────────────
 const props = defineProps({
@@ -69,11 +70,22 @@ function statusClass(status) {
   }[status] ?? ''
 }
 
+function claimOutstanding(claim) {
+  if (claim.outstanding_amount != null) return claim.outstanding_amount
+  const paid = claim.paid_amount ?? 0
+  return Math.max(0, (claim.expected_amount ?? 0) - paid)
+}
+
+function incomeAvailableForClaim(claimId) {
+  const already = parseFloat(allocations[claimId]) || 0
+  return props.transaction.amount - totalAllocated.value + already
+}
+
 function fillMaxFor(claimId) {
   const claim = claims.value.find(c => c.id === claimId)
   if (!claim) return
-  const maxAmount = Math.min(claim.expected_amount, props.transaction.amount)
-  allocations[claimId] = String(maxAmount.toFixed(2))
+  const maxAmount = Math.min(claimOutstanding(claim), incomeAvailableForClaim(claimId))
+  allocations[claimId] = String(Math.max(0, maxAmount).toFixed(2))
 }
 
 // ── Submit ─────────────────────────────────────────────────────────────────
@@ -92,6 +104,16 @@ async function submit() {
   if (totalAllocated.value > props.transaction.amount + 0.01) {
     errorMsg.value = `Total alocado (${fmt(totalAllocated.value)}) excede o valor da entrada (${fmt(props.transaction.amount)}).`
     return
+  }
+
+  for (const alloc of allocs) {
+    const claim = claims.value.find(c => c.id === alloc.claim_id)
+    if (!claim) continue
+    const restante = claimOutstanding(claim)
+    if (alloc.paid_amount > restante + 0.01) {
+      errorMsg.value = `Valor em «${claim.description}» (${fmt(alloc.paid_amount)}) excede o restante (${fmt(restante)}).`
+      return
+    }
   }
 
   isSubmitting.value = true
@@ -184,8 +206,15 @@ function onOverlay(e) {
                   </div>
                   <div class="claim-meta">
                     <span>{{ claim.translated_description || '—' }}</span>
-                    <span class="claim-date">{{ claim.month_year }}</span>
-                    <span class="claim-expected">Esperado: {{ fmt(claim.expected_amount) }}</span>
+                    <span class="claim-date">{{ fmtDate(claim.date) }} · {{ fmtMonthYear(claim.month_year) }}</span>
+                    <span class="claim-expected">
+                      Restante: {{ fmt(claimOutstanding(claim)) }}
+                      <template v-if="(claim.paid_amount ?? 0) > 0">
+                        <span class="claim-expected__detail">
+                          (de {{ fmt(claim.expected_amount) }}, já recebido {{ fmt(claim.paid_amount) }})
+                        </span>
+                      </template>
+                    </span>
                   </div>
                 </div>
 
@@ -197,7 +226,7 @@ function onOverlay(e) {
                       type="number"
                       step="0.01"
                       min="0"
-                      :max="claim.expected_amount"
+                      :max="claimOutstanding(claim)"
                       class="form-control form-control--prefixed form-control--sm"
                       placeholder="0,00"
                     />
@@ -279,6 +308,7 @@ function onOverlay(e) {
 .claim-desc { font-size: .9rem; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .claim-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: .76rem; color: var(--color-text-muted); }
 .claim-expected { font-weight: 600; color: var(--color-error); }
+.claim-expected__detail { font-weight: 400; color: var(--color-text-muted); }
 
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 600; flex-shrink: 0; }
 .badge--aberto  { background: var(--color-warning-bg); color: var(--color-warning); }

@@ -11,7 +11,7 @@ declare(strict_types=1);
  * DELETE /api_transactions.php?id=N            → exclui transação (e vínculos de reembolso)
  */
 
-require_once __DIR__ . '/../src/db/Database.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');
@@ -237,12 +237,15 @@ try {
         jsonResponse(['success' => true]);
     }
 
+    $excludeInternal = InternalTransferService::sqlExcludeFromTotals('t');
+
     // Retorna apenas a lista de meses disponíveis (para popular o filtro)
     if (isset($_GET['available_months'])) {
         $stmt   = $pdo->query(
-            "SELECT DISTINCT month_year
-             FROM transactions
-             ORDER BY month_year DESC"
+            "SELECT DISTINCT t.month_year
+             FROM transactions t
+             WHERE 1=1{$excludeInternal}
+             ORDER BY t.month_year DESC"
         );
         $months = $stmt->fetchAll(PDO::FETCH_COLUMN);
         jsonResponse($months);
@@ -271,8 +274,10 @@ try {
     $params = [];
 
     if ($monthYear !== null && $monthYear !== '') {
-        $sql    .= ' WHERE t.month_year = :month_year';
+        $sql    .= " WHERE t.month_year = :month_year{$excludeInternal}";
         $params[':month_year'] = $monthYear;
+    } else {
+        $sql .= " WHERE 1=1{$excludeInternal}";
     }
 
     $sql .= ' ORDER BY t.date DESC, t.id DESC';

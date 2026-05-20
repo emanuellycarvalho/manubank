@@ -12,13 +12,13 @@ const selectedFiles = ref([])
 const dragOver      = ref(false)
 const fileInputRef  = ref(null)
 
-const pasteText = ref('')
-const pasteYear = ref(new Date().getFullYear())
+const pasteText  = ref('')
+const pasteYear  = ref(new Date().getFullYear())
 
 const isLoading = ref(false)
 const result    = ref(null)
 
-const ACCEPT_ATTR = 'text/csv,.csv'
+const ACCEPT_ATTR = 'application/pdf,.pdf,text/csv,.csv'
 
 function addFiles(fileList) {
   if (!fileList?.length) return
@@ -67,8 +67,15 @@ function switchMode(m) {
   result.value = null
 }
 
+const isValidPasteYear = computed(() => {
+  const y = Number(pasteYear.value)
+  return Number.isInteger(y) && y >= 2020 && y <= 2099
+})
+
 const canSubmit = computed(() =>
-  mode.value === 'file' ? selectedFiles.value.length > 0 : pasteText.value.trim().length > 0
+  mode.value === 'file'
+    ? selectedFiles.value.length > 0
+    : pasteText.value.trim().length > 0 && isValidPasteYear.value
 )
 
 function mergeMonthGroups(target, source) {
@@ -167,7 +174,7 @@ function reset() {
       <div>
         <h2 class="page-title">Importar Extrato</h2>
         <p class="page-subtitle">
-          Cole o texto da fatura Nubank ou envie um CSV do Mercado Pago.
+          Envie PDF da fatura Nubank ou CSV do Mercado Pago, ou cole o texto da fatura.
           <span v-if="profileName" class="page-subtitle__hint">
             Pix com «{{ profileName }}» na descrição serão marcados como movimentação interna.
           </span>
@@ -288,11 +295,10 @@ function reset() {
           <h3 class="instructions__title">Como importar</h3>
           <ol class="instructions__list">
             <li>
-              <strong>Colar texto</strong> — use o separador «Colar texto» para a fatura do cartão
-              Nubank (linhas copiadas do site ou app: data, cartão e valor).
+              <strong>Enviar ficheiro</strong> — PDF Nubank (nome <code>Nubank_AAAA-MM-DD.pdf</code>) ou CSV Mercado Pago.
             </li>
             <li>
-              <strong>Enviar ficheiro</strong> — arraste ou selecione um ou vários CSV exportados do Mercado Pago.
+              <strong>Colar texto</strong> — alternativa para Nubank: linhas copiadas do site ou app.
             </li>
             <li>
               Clique em <strong>Importar</strong>. As transações são categorizadas pelas regras
@@ -336,6 +342,12 @@ function reset() {
         </div>
 
         <template v-if="mode === 'file'">
+          <p class="file-format-hint">
+            PDF Nubank: mantenha o nome original (ex. <code>Nubank_2026-01-06.pdf</code> = vencimento).
+            O ano das compras é calculado pelo período da fatura no PDF, não pela data do nome.
+            CSV Mercado Pago: a data completa vem no extrato.
+          </p>
+
           <div
             class="dropzone"
             :class="{ 'dropzone--over': dragOver, 'dropzone--ready': selectedFiles.length > 0 }"
@@ -358,7 +370,7 @@ function reset() {
               <p class="dropzone__text">
                 Arraste os ficheiros aqui ou <span class="link">clique para selecionar</span>
               </p>
-              <p class="dropzone__hint">Um ou vários CSV (Mercado Pago)</p>
+              <p class="dropzone__hint">PDF (fatura Nubank) ou CSV (Mercado Pago)</p>
             </template>
 
             <template v-else>
@@ -406,6 +418,7 @@ function reset() {
                 max="2099"
                 class="year-input"
               />
+              <span class="year-hint">As linhas da fatura trazem só dia e mês (ex.: 29 AGO)</span>
             </div>
 
             <textarea
@@ -701,8 +714,23 @@ function reset() {
   gap: 12px;
 }
 
-.year-row   { display: flex; align-items: center; gap: 10px; }
+.file-format-hint {
+  margin: 0 0 12px;
+  font-size: .8rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.file-format-hint code {
+  font-size: .78rem;
+  background: var(--color-bg-muted, rgba(0, 0, 0, .06));
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.year-row   { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .year-label { font-size: .85rem; font-weight: 500; color: var(--color-text-muted); }
+.year-hint  { font-size: .75rem; color: var(--color-text-muted); }
 
 .year-input {
   width: 100px;

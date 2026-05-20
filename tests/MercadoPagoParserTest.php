@@ -29,7 +29,7 @@ final class MercadoPagoParserTest extends TestCase
 
         $pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Transporte', 'Variável', '#6B8D9E')");
         $catTransporte = (int) $pdo->lastInsertId();
-        $pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Outros', 'Variável', '#9C9C9C')");
+        $pdo->exec("INSERT INTO categories (name, type, color) VALUES ('Não sei', 'Neutro', '#8A8F9E')");
 
         $pdo->exec("INSERT INTO parsing_rules (category_id, substring, translated_name) VALUES ({$catTransporte}, 'uber', 'Transporte')");
 

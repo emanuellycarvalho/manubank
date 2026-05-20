@@ -30,8 +30,8 @@ onMounted(async () => {
   try {
     const { data } = await categoriesApi.list()
     categories.value = data
-    // Pré-seleciona a categoria atual se não for "Outros"
-    if (props.transaction.category_name !== 'Outros') {
+    // Pré-seleciona a categoria atual se ainda for "Não sei" (sem regra definida)
+    if (props.transaction.category_name !== 'Não sei') {
       form.category_id = props.transaction.category_id
     }
   } catch (err) {

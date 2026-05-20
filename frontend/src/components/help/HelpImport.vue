@@ -7,7 +7,7 @@ const TOC = [
     id: 'formas-importar',
     label: 'Duas formas de importar',
     children: [
-      { id: 'enviar-ficheiro', label: 'Enviar ficheiro (Mercado Pago)' },
+      { id: 'enviar-ficheiro', label: 'Enviar ficheiro (PDF ou CSV)' },
       { id: 'colar-texto', label: 'Colar texto (fatura Nubank)' },
     ],
   },
@@ -23,8 +23,8 @@ const TOC = [
   <article class="help-article">
     <p class="help-lead">
       A tela <strong>Importar</strong> é por onde os seus movimentos bancários entram no ManuBank.
-      Para o <strong>Nubank</strong>, você cola as linhas copiadas da fatura do cartão.
-      Para o <strong>Mercado Pago</strong>, envia um ficheiro CSV. O sistema lê, categoriza e grava
+      Para o <strong>Nubank</strong>, envie o PDF da fatura ou cole as linhas copiadas do site/app.
+      Para o <strong>Mercado Pago</strong>, envie um CSV. O sistema lê, categoriza e grava
       tudo no Extrato — sem digitar lançamento por lançamento.
     </p>
 
@@ -49,7 +49,7 @@ const TOC = [
     <section id="para-que-serve" class="help-section">
       <h3 class="help-h3">Para que serve?</h3>
       <ul class="help-list">
-        <li>Trazer a <strong>fatura do cartão Nubank</strong> colando o texto copiado do site ou app do banco.</li>
+        <li>Trazer a <strong>fatura do cartão Nubank</strong> via PDF ou colando o texto copiado do site ou app.</li>
         <li>Trazer movimentos do <strong>Mercado Pago</strong> com um ficheiro <strong>CSV</strong> exportado pelo app ou site.</li>
         <li>Aplicar automaticamente as <strong>Regras</strong> que você configurou, para sugerir categorias.</li>
         <li>Evitar trabalho manual: depois da importação, você só revisa e corrige o que for necessário no <strong>Extrato</strong>.</li>
@@ -109,33 +109,37 @@ const TOC = [
       </p>
 
       <div class="help-card-block">
-        <h4 id="enviar-ficheiro" class="help-h4">Enviar ficheiro (Mercado Pago)</h4>
-        <p><strong>Para que serve:</strong> importar movimentos do <strong>Mercado Pago</strong> a partir de um CSV guardado no computador.</p>
-        <p><strong>Formato aceite:</strong> ficheiro <strong>CSV</strong> exportado pelo Mercado Pago (movimentos Pix e outros que o extrato incluir).</p>
-        <p class="help-note help-note--info">
-          A fatura do <strong>Nubank</strong> não é importada por ficheiro nesta tela — use a aba
-          <strong>Colar texto (Nubank)</strong>.
-        </p>
+        <h4 id="enviar-ficheiro" class="help-h4">Enviar ficheiro (Nubank ou Mercado Pago)</h4>
+        <p><strong>Para que serve:</strong> importar a <strong>fatura do cartão Nubank</strong> (PDF) ou movimentos do <strong>Mercado Pago</strong> (CSV).</p>
+        <p><strong>Formatos aceites:</strong></p>
+        <ul class="help-list">
+          <li><strong>PDF</strong> — fatura do cartão Nubank descarregada do site ou app.</li>
+          <li><strong>CSV</strong> — exportado pelo Mercado Pago (Pix e outros movimentos do extrato).</li>
+        </ul>
         <p><strong>Passo a passo:</strong></p>
         <ol class="help-steps">
           <li>Clique na aba <strong>Enviar ficheiro</strong>.</li>
           <li>
+            PDF Nubank: use o nome original do download, no formato
+            <code>Nubank_AAAA-MM-DD.pdf</code> (ex.: <code>Nubank_2025-10-06.pdf</code>) — o sistema lê o ano do nome.
+          </li>
+          <li>
             Na área tracejada, <strong>arraste</strong> um ou vários ficheiros ou <strong>clique</strong> na área
-            para abrir a janela de escolha (pode selecionar vários CSV de uma vez).
+            para abrir a janela de escolha.
           </li>
           <li>Confirme a lista de ficheiros. Remova um com ✕ ou use <strong>Limpar todos</strong>; <strong>+ Adicionar mais ficheiros</strong> inclui outros sem perder os já escolhidos.</li>
           <li>Clique no botão grande <strong>Importar</strong> (ou <strong>Importar N ficheiros</strong> quando houver mais de um).</li>
         </ol>
         <p class="help-note">
-          Se o ficheiro não for um CSV válido do Mercado Pago, aparece erro de tipo não suportado.
+          PDF inválido ou fatura sem linhas reconhecíveis mostra mensagem de erro. CSV deve ser do Mercado Pago.
         </p>
       </div>
 
       <div class="help-card-block">
         <h4 id="colar-texto" class="help-h4">Colar texto (fatura Nubank)</h4>
         <p>
-          <strong>Para que serve:</strong> importar a <strong>fatura do cartão Nubank</strong> — copie as linhas
-          no site ou app do banco e cole aqui. É o método usado para Nubank no ManuBank.
+          <strong>Para que serve:</strong> importar a <strong>fatura do cartão Nubank</strong> quando preferir
+          copiar as linhas no site ou app em vez de enviar o PDF.
         </p>
         <ol class="help-steps">
           <li>Clique na aba <strong>Colar texto (Nubank)</strong>.</li>
@@ -277,7 +281,7 @@ const TOC = [
           <strong>Botão Importar desativado</strong> — falta escolher ficheiro ou a caixa de texto está vazia.
         </li>
         <li>
-          <strong>Tipo de ficheiro não suportado</strong> — na aba de ficheiro só vale CSV do Mercado Pago; Nubank é sempre pela aba de colar texto.
+          <strong>Tipo de ficheiro não suportado</strong> — na aba de ficheiro use PDF (fatura Nubank) ou CSV (Mercado Pago).
         </li>
         <li>
           <strong>Muitas ignoradas, poucas importadas</strong> — pode ser reimportação do mesmo extrato;

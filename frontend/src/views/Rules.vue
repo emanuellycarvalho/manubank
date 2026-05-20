@@ -85,7 +85,7 @@ async function submitForm() {
       const n = data?.transactions_updated ?? 0
       const existed = data?.already_existed ?? false
       const extra = n > 0
-        ? ` ${n} transaç${n === 1 ? 'ão' : 'ões'} em "Outros" atualizadas.`
+        ? ` ${n} transaç${n === 1 ? 'ão' : 'ões'} em "Não sei" atualizadas.`
         : ''
       showSuccess(existed
         ? `Regra já existia — aplicada retroativamente.${extra}`
