@@ -9,13 +9,13 @@
 /* ── Paleta oficial (dark) ── */
 :root {
   /* Fundos */
-  --color-bg-primary: #000C29;
+  --color-bg-primary: #060b18;
   /* main section */
   --color-bg-secondary: #000614;
   /* sidebar, cards */
   --color-bg-elevated: #001a5c;
   /* hover / thead */
-  --color-bg-input: #000C29;
+  --color-bg-input: #060b18;
   /* inputs dentro de cards */
 
   /* Marca & texto */
@@ -41,7 +41,7 @@
   --color-border-dark: #00123D;
   /* em fundo secondary (#000614) */
   --color-border-light: #253762;
-  /* em fundo primary (#000C29), igual ao info */
+  /* em fundo primary (#060b18), igual ao info */
   --color-border-subtle-dark: rgba(72, 86, 150, 0.45);
   --color-border-subtle-light: rgba(37, 55, 98, 0.55);
 

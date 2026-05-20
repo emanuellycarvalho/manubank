@@ -208,17 +208,15 @@ const pageTitle = computed(() => route.meta?.title ?? 'ManuBank')
   width: 36px;
   height: 36px;
   flex-shrink: 0;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-elevated);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.sidebar-toggle:hover {
-  color: var(--color-text);
-  border-color: var(--color-accent);
+.sidebar-toggle .unicon svg:hover {
+  fill: var(--color-accent);
 }
 
 .sidebar-brand {
@@ -313,12 +311,11 @@ const pageTitle = computed(() => route.meta?.title ?? 'ManuBank')
 
 .profile-name-input {
   width: 100%;
-  padding: 4px 6px;
   margin: 0;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  font-size: 0.88rem;
+  font-size: 1.2rem;
   font-weight: 600;
   color: var(--color-text);
   font-family: inherit;
