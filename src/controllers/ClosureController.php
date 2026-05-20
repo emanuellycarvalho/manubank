@@ -105,12 +105,12 @@ final class ClosureController
             $closureId = (int) $this->pdo->lastInsertId();
 
             // Apagar alocações anteriores (re-fechamento idempotente)
-            $this->pdo->prepare('DELETE FROM investment_allocations WHERE monthly_closure_id = :id')
+            $this->pdo->prepare('DELETE FROM closure_allocations WHERE monthly_closure_id = :id')
                       ->execute([':id' => $closureId]);
 
             // Inserir alocações
             $insertAlloc = $this->pdo->prepare(
-                'INSERT INTO investment_allocations
+                'INSERT INTO closure_allocations
                      (monthly_closure_id, objective, target_amount, actual_amount, is_extra_surplus)
                  VALUES
                      (:monthly_closure_id, :objective, :target_amount, :actual_amount, :is_extra_surplus)'
@@ -151,7 +151,7 @@ final class ClosureController
                     ia.id AS alloc_id, ia.objective, ia.target_amount,
                     ia.actual_amount, ia.is_extra_surplus
              FROM monthly_closures mc
-             LEFT JOIN investment_allocations ia ON ia.monthly_closure_id = mc.id
+             LEFT JOIN closure_allocations ia ON ia.monthly_closure_id = mc.id
              WHERE mc.month_year = :month_year'
         );
 

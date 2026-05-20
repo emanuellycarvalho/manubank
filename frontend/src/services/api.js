@@ -132,6 +132,21 @@ export const investmentsApi = {
     http.delete(`/api_investments.php?entry_id=${entryId}`),
 }
 
+// ── Investment allocations (consolidado) ────────────────────────────────────
+export const allocationsApi = {
+  list: () => http.get('/api_allocations.php'),
+  get: (id) => http.get(`/api_allocations.php?id=${id}`),
+  create: (payload) => http.post('/api_allocations.php', payload),
+  update: (id, payload) => http.put(`/api_allocations.php?id=${id}`, payload),
+  remove: (id) => http.delete(`/api_allocations.php?id=${id}`),
+}
+
+// ── CDI base rate ───────────────────────────────────────────────────────────
+export const cdiApi = {
+  get: (refresh = false) =>
+    http.get('/api_cdi.php', refresh ? { params: { refresh: 1 } } : {}),
+}
+
 // ── Reimbursements ──────────────────────────────────────────────────────────
 export const reimbursementsApi = {
   activeClaims: () => http.get('/api_reimbursements.php'),

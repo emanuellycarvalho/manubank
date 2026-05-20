@@ -30,6 +30,8 @@ import {
   uniAngleRightB,
   uniBars,
   uniUser,
+  uniStar,
+  uniStarSolid,
 } from 'vue-unicons/dist/icons'
 
 Unicon.add([
@@ -59,6 +61,8 @@ Unicon.add([
   uniAngleRightB,
   uniBars,
   uniUser,
+  uniStar,
+  uniStarSolid,
 ])
 
 const app = createApp(App)

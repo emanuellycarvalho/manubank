@@ -83,8 +83,8 @@ function getTableDefinitions(): array
             )
             SQL,
 
-        'investment_allocations' => <<<'SQL'
-            CREATE TABLE IF NOT EXISTS investment_allocations (
+        'closure_allocations' => <<<'SQL'
+            CREATE TABLE IF NOT EXISTS closure_allocations (
                 id                 INTEGER PRIMARY KEY AUTOINCREMENT,
                 monthly_closure_id INTEGER NOT NULL,
                 objective          TEXT    NOT NULL,
@@ -93,6 +93,24 @@ function getTableDefinitions(): array
                 is_extra_surplus   INTEGER NOT NULL DEFAULT 0 CHECK (is_extra_surplus IN (0, 1)),
                 FOREIGN KEY (monthly_closure_id) REFERENCES monthly_closures (id)
                     ON DELETE CASCADE ON UPDATE CASCADE
+            )
+            SQL,
+
+        'investment_allocations' => <<<'SQL'
+            CREATE TABLE IF NOT EXISTS investment_allocations (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                objective_id    INTEGER,
+                bank            TEXT    NOT NULL,
+                type            TEXT,
+                liquidity       TEXT,
+                amount          REAL    NOT NULL,
+                priority        INTEGER CHECK (priority IS NULL OR (priority >= 1 AND priority <= 5)),
+                cdi_percentage  REAL,
+                monthly_rate    REAL,
+                yearly_rate     REAL,
+                description     TEXT,
+                FOREIGN KEY (objective_id) REFERENCES investment_objectives (id)
+                    ON DELETE SET NULL ON UPDATE CASCADE
             )
             SQL,
 
@@ -148,6 +166,30 @@ function getTableDefinitions(): array
 }
 
 /**
+ * Renomeia a tabela legada de alocações de fechamento (schema antigo).
+ */
+function migrateLegacyInvestmentAllocationsTable(PDO $pdo): void
+{
+    $exists = $pdo->query(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'investment_allocations' LIMIT 1"
+    )->fetchColumn();
+
+    if ($exists === false) {
+        return;
+    }
+
+    $columns = $pdo->query('PRAGMA table_info(investment_allocations)')->fetchAll(PDO::FETCH_ASSOC);
+    $names   = array_column($columns, 'name');
+
+    if (!in_array('monthly_closure_id', $names, true) || in_array('bank', $names, true)) {
+        return;
+    }
+
+    $pdo->exec('ALTER TABLE investment_allocations RENAME TO closure_allocations');
+    echo "Migração: investment_allocations (fechamento) → closure_allocations\n";
+}
+
+/**
  * Cria índices auxiliares para consultas frequentes.
  */
 function createIndexes(PDO $pdo): void
@@ -157,7 +199,8 @@ function createIndexes(PDO $pdo): void
         'CREATE INDEX IF NOT EXISTS idx_transactions_month_year ON transactions (month_year)',
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_uniq_transaction ON transactions (date, origin, operation, raw_description, amount)',
         'CREATE INDEX IF NOT EXISTS idx_parsing_rules_category_id ON parsing_rules (category_id)',
-        'CREATE INDEX IF NOT EXISTS idx_investment_allocations_closure_id ON investment_allocations (monthly_closure_id)',
+        'CREATE INDEX IF NOT EXISTS idx_closure_allocations_closure_id ON closure_allocations (monthly_closure_id)',
+        'CREATE INDEX IF NOT EXISTS idx_investment_allocations_objective_id ON investment_allocations (objective_id)',
         'CREATE INDEX IF NOT EXISTS idx_reimbursement_claims_transaction_id ON reimbursement_claims (transaction_id)',
         'CREATE INDEX IF NOT EXISTS idx_reimbursement_payments_claim_id ON reimbursement_payments (claim_id)',
         'CREATE INDEX IF NOT EXISTS idx_investment_entries_objective_id ON investment_entries (objective_id)',
@@ -181,6 +224,8 @@ try {
     $pdo->exec('PRAGMA foreign_keys = ON;');
 
     $tables = getTableDefinitions();
+
+    migrateLegacyInvestmentAllocationsTable($pdo);
 
     foreach ($tables as $tableName => $createSql) {
         executePrepared($pdo, $createSql);

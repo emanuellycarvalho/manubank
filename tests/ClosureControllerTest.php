@@ -182,7 +182,7 @@ final class ClosureControllerTest extends TestCase
         $closureId = $this->controller->saveClosure('2026-04', $inv2, 0.0);
 
         $count = $this->pdo->query(
-            "SELECT COUNT(*) FROM investment_allocations WHERE monthly_closure_id = {$closureId}"
+            "SELECT COUNT(*) FROM closure_allocations WHERE monthly_closure_id = {$closureId}"
         )->fetchColumn();
 
         $this->assertSame('2', (string) $count);
@@ -277,7 +277,7 @@ final class ClosureControllerTest extends TestCase
         SQL);
 
         $this->pdo->exec(<<<'SQL'
-            CREATE TABLE investment_allocations (
+            CREATE TABLE closure_allocations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 monthly_closure_id INTEGER NOT NULL,
                 objective TEXT NOT NULL,

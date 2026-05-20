@@ -18,4 +18,6 @@ return array(
     'c3f1f0f6127bf2211979a40bbf2fd122' => $baseDir . '/src/controllers/ClosureController.php',
     '84a7e12bf2546d8dc82d9d71864b91e7' => $baseDir . '/src/controllers/ChartController.php',
     'd0354316fc563170a3e68595e82e824d' => $baseDir . '/src/controllers/InvestmentController.php',
+    '235da82a2d87275820a02b8ff68d4ef4' => $baseDir . '/src/controllers/AllocationController.php',
+    'e15f25dca39e114d10c0ada55dadf2f3' => $baseDir . '/src/services/CdiService.php',
 );

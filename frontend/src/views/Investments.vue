@@ -2,6 +2,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { investmentsApi } from '@/services/api.js'
 import ConfirmModal from '@/components/ConfirmModal.vue'
+import InvestmentAllocations from '@/components/InvestmentAllocations.vue'
 import YieldGrowthChart from '@/components/charts/YieldGrowthChart.vue'
 import { useTableSort } from '@/composables/useTableSort.js'
 import { toIsoDate, defaultDashboardDateRange } from '@/utils/dates.js'
@@ -25,8 +26,11 @@ const ENTRY_SORT_COLS = [
 
 const FOREX_URL = 'https://economia.awesomeapi.com.br/last/USD-BRL,EUR-BRL,GBP-BRL'
 
+/** Aba fixa do consolidado de alocações (primeira aba). */
+const ALLOCATIONS_TAB = '__allocations__'
+
 const objectives = ref([])
-const activeId = ref(null)
+const activeTab = ref(ALLOCATIONS_TAB)
 const isLoading = ref(false)
 const isSubmitting = ref(false)
 const isDeleting = ref(false)
@@ -88,9 +92,12 @@ function fmtDate(d) {
   return `${m[3]}/${m[2]}/${m[1]}`
 }
 
-const activeObjective = computed(() =>
-  objectives.value.find((o) => o.id === activeId.value) ?? null,
-)
+const isAllocationsTab = computed(() => activeTab.value === ALLOCATIONS_TAB)
+
+const activeObjective = computed(() => {
+  if (isAllocationsTab.value) return null
+  return objectives.value.find((o) => o.id === activeTab.value) ?? null
+})
 
 const historico = computed(() => activeObjective.value?.historico ?? [])
 
@@ -215,18 +222,20 @@ async function loadObjectives() {
     objectives.value = Array.isArray(list) ? list : []
 
     if (objectives.value.length === 0) {
-      activeId.value = null
+      activeTab.value = ALLOCATIONS_TAB
       return
     }
 
-    const stillExists = objectives.value.some((o) => o.id === activeId.value)
-    if (!stillExists) {
-      activeId.value = objectives.value[0].id
+    if (activeTab.value !== ALLOCATIONS_TAB) {
+      const stillExists = objectives.value.some((o) => o.id === activeTab.value)
+      if (!stillExists) {
+        activeTab.value = ALLOCATIONS_TAB
+      }
     }
   } catch (err) {
     errorMsg.value = err.message
     objectives.value = []
-    activeId.value = null
+    activeTab.value = ALLOCATIONS_TAB
   } finally {
     isLoading.value = false
   }
@@ -474,7 +483,7 @@ async function confirmDeleteEntry() {
 }
 
 function selectTab(id) {
-  activeId.value = id
+  activeTab.value = id
 }
 
 function onObjectiveModalOverlay(e) {
@@ -550,27 +559,29 @@ onMounted(async () => {
       Carregando objetivos…
     </div>
 
-    <div v-else-if="objectives.length === 0" class="empty-state card">
-      <unicon name="wallet" width="40" height="40" class="empty-icon" />
-      <p>Nenhum objetivo cadastrado ainda.</p>
-      <button type="button" class="btn btn--primary" @click="openCreateObjectiveModal">
-        <unicon name="plus" width="16" height="16" />
-        Criar primeiro objetivo
-      </button>
-    </div>
-
     <template v-else>
-      <!-- Abas de objetivos (mesmo padrão Import.vue) -->
+      <!-- Abas: Consolidado + objetivos -->
       <div class="objectives-toolbar">
-        <div class="tabs investments-tabs" role="tablist" aria-label="Objetivos de investimento">
+        <div class="tabs investments-tabs" role="tablist" aria-label="Investimentos">
+          <button
+            type="button"
+            role="tab"
+            class="tab"
+            :class="{ 'tab--active': isAllocationsTab }"
+            :aria-selected="isAllocationsTab"
+            @click="selectTab(ALLOCATIONS_TAB)"
+          >
+            <unicon name="chart-pie" width="16" height="16" />
+            Consolidado
+          </button>
           <button
             v-for="obj in objectives"
             :key="obj.id"
             type="button"
             role="tab"
             class="tab"
-            :class="{ 'tab--active': obj.id === activeId }"
-            :aria-selected="obj.id === activeId"
+            :class="{ 'tab--active': obj.id === activeTab }"
+            :aria-selected="obj.id === activeTab"
             @click="selectTab(obj.id)"
           >
             {{ obj.name }}
@@ -587,7 +598,21 @@ onMounted(async () => {
         </button>
       </div>
 
-      <template v-if="activeObjective">
+      <InvestmentAllocations
+        v-if="isAllocationsTab"
+        :objectives="objectives"
+      />
+
+      <div v-else-if="objectives.length === 0" class="empty-state card">
+        <unicon name="wallet" width="40" height="40" class="empty-icon" />
+        <p>Nenhum objetivo cadastrado ainda.</p>
+        <button type="button" class="btn btn--primary" @click="openCreateObjectiveModal">
+          <unicon name="plus" width="16" height="16" />
+          Criar primeiro objetivo
+        </button>
+      </div>
+
+      <template v-else-if="activeObjective">
         <div class="investments-active">
         <div class="investments-top">
         <!-- Métricas (50%) -->
@@ -1179,6 +1204,9 @@ onMounted(async () => {
 
 .investments-tabs .tab {
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .investments-tabs .tab:hover {
