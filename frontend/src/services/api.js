@@ -1,7 +1,8 @@
 import axios from 'axios'
 
+/** Em desenvolvimento o Vite faz proxy de /api → PHP; em produção local tudo está no mesmo servidor. */
 const http = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.DEV ? '/api' : '',
   headers: { 'Content-Type': 'application/json' },
 })
 

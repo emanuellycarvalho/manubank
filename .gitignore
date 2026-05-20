@@ -1,3 +1,10 @@
+# Estado local do make app
+.manubank/
+
+# Interface compilada (gerada por make setup / app.bat)
+public/index.html
+public/assets/
+
 # SQLite (gerado localmente)
 src/db/finance.sqlite
 src/db/finance.sqlite-journal

@@ -18,7 +18,6 @@ const {
 const brandLogoSrc = '/manubank-logo-1.png'
 
 const navLinks = [
-  { to: '/',              label: 'To do',         icon: 'estate' },
   { to: '/dashboard',     label: 'Dashboard',     icon: 'chart-pie' },
   { to: '/importar',      label: 'Importar',      icon: 'upload-alt' },
   { to: '/extrato',       label: 'Extrato',       icon: 'file-alt' },
@@ -27,8 +26,7 @@ const navLinks = [
   { to: '/regras',        label: 'Regras',        icon: 'clipboard-alt' },
 ]
 
-const isActive = (path) =>
-  path === '/' ? route.path === '/' : route.path.startsWith(path)
+const isActive = (path) => route.path.startsWith(path)
 
 const pageTitle = computed(() => route.meta?.title ?? 'ManuBank')
 </script>

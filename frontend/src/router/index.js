@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Home         from '@/views/Home.vue'
 import Dashboard    from '@/views/Dashboard.vue'
 import Categories   from '@/views/Categories.vue'
 import Rules        from '@/views/Rules.vue'
@@ -10,9 +9,7 @@ import Investments  from '@/views/Investments.vue'
 const routes = [
   {
     path: '/',
-    name: 'Home',
-    component: Home,
-    meta: { title: 'To do' },
+    redirect: '/dashboard',
   },
   {
     path: '/dashboard',
